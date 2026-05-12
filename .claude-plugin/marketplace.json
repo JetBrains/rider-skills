@@ -1,0 +1,17 @@
+{
+  "name": "rider-skills",
+  "owner": {
+    "name": "JetBrains"
+  },
+  "plugins": [
+    {
+      "name": "rider-skills",
+      "version": "0.1.0",
+      "source": "./",
+      "description": "Rider semantic refactoring, debugger-driven analysis, and Unreal Engine C++ skills.",
+      "author": {
+        "name": "JetBrains"
+      }
+    }
+  ]
+}
