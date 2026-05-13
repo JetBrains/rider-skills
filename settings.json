@@ -1,5 +1,18 @@
 {
   "hooks": {
+    "PreToolUse": [
+      {
+        "description": "Run Rider quality check before reading a file — surfaces errors/warnings as context",
+        "matcher": "Read",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "${CLAUDE_PROJECT_DIR}/.claude/hooks/pre-read-check.cmd",
+            "timeout": 30
+          }
+        ]
+      }
+    ],
     "PostToolUse": [
       {
         "description": "Run Rider quality checks after every source file edit: inspect → reformat → quick-fix warnings",

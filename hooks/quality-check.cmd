@@ -160,8 +160,8 @@
 :
 : # extract_problems <severity> <resp> <basename>
 : extract_problems() {
-:   label="$1"; resp="$2"
-:   printf '%s' "$resp" | awk -v lbl="$label" -F'"severity":"' '
+:   label="$1"; resp="$2"; file="$3"
+:   printf '%s' "$resp" | awk -v lbl="$label" -v f="$file" -F'"severity":"' '
 :     NF>1{
 :       for(i=2;i<=NF;i++){
 :         split($i,sv,"\""); if(sv[1]!=lbl) continue
@@ -169,7 +169,7 @@
 :         if(length(dd)>1){split(dd[2],de,"\""); desc=de[1]}
 :         ln=0; split($i,ll,"\"line\":")
 :         if(length(ll)>1){split(ll[2],le,","); ln=le[1]+0}
-:         if(desc!="")printf "• L%d: %s\n", ln, desc
+:         if(desc!="")printf "[%s] %s:%d: %s\n", lbl, f, ln, desc
 :       }
 :     }'
 : }
@@ -201,8 +201,8 @@
 : # ── Check for critical errors (blocking) ─────────────────────────────────────
 : error_count=$(printf '%s' "$resp_err" | awk -F'"severity":"ERROR"' '{print NF-1}')
 : if [ "${error_count:-0}" -gt 0 ]; then
-:   errors=$(extract_problems "ERROR" "$resp_err")
-:   warns_init=$(extract_problems "WARNING" "$resp_lint")
+:   errors=$(extract_problems "ERROR" "$resp_err" "$(basename "$QC_FP")")
+:   warns_init=$(extract_problems "WARNING" "$resp_lint" "$(basename "$QC_FP")")
 :   warn_init_count=$(printf '%s' "$resp_lint" | awk -F'"severity":"WARNING"' '{print NF-1}')
 :   kill "$sse_pid" 2>/dev/null; wait "$sse_pid" 2>/dev/null; rm -f "$sse"
 :   body="$(printf 'Rider [%s] — %d error(s) in %s:\n%s' "$reformat_status" "$error_count" "$(basename "$QC_FP")" "$errors")"
@@ -220,7 +220,7 @@
 : kill "$sse_pid" 2>/dev/null; wait "$sse_pid" 2>/dev/null; rm -f "$sse"
 :
 : if [ "${warn_count:-0}" -gt 0 ]; then
-:   warns=$(extract_problems "WARNING" "$resp_final")
+:   warns=$(extract_problems "WARNING" "$resp_final" "$(basename "$QC_FP")")
 :   output_result "" "" \
 :     "$(printf 'Rider [%s] — %d fixable warning(s) in %s:\n%s' "$reformat_status" "$warn_count" "$(basename "$QC_FP")" "$warns")"
 : else
@@ -277,9 +277,9 @@ powershell -NoProfile -Command ^
   "  $dl=(Get-Date).AddSeconds(25);" ^
   "  while((Get-Date)-lt $dl){Start-Sleep -ms 200;$c=try{Get-Content $sseFile -Raw}catch{''};" ^
   "    foreach($l in ($c-split\"`n\")){if($l-match \"^data:.*`\"id`\":${id}[^0-9]\"){return($l-replace'^data: ','')}}}; return $null};" ^
-  "function ExtractProblems($lbl,$resp){" ^
+  "function ExtractProblems($lbl,$resp,$file){" ^
   "  [regex]::Matches($resp,'\"severity\":\"'+$lbl+'\".*?\"description\":\"([^\"]+)\".*?\"line\":(\d+)') | ForEach-Object {" ^
-  "    '• L'+$_.Groups[2].Value+': '+$_.Groups[1].Value}};" ^
+  "    '['+$lbl+'] '+$file+':'+$_.Groups[2].Value+': '+$_.Groups[1].Value}};" ^
   "function OutputResult($decision,$reason,$msg){" ^
   "  $h=@{hookSpecificOutput=@{hookEventName='PostToolUse';additionalContext=$msg}};" ^
   "  if($decision){$h.hookSpecificOutput['decision']=$decision;$h['reason']=$reason};" ^
@@ -300,8 +300,8 @@ powershell -NoProfile -Command ^
   "$rfStatus=if($rFmt -match '\"text\":\"ok\"'){'reformatted'}else{'reformat skipped'};" ^
   "$errCount=($rErr-split'\"severity\":\"ERROR\"').Count-1;" ^
   "if($errCount -gt 0){" ^
-  "  $lines=(ExtractProblems 'ERROR' $rErr)-join \"`n\";" ^
-  "  $wlines=(ExtractProblems 'WARNING' $rLint)-join \"`n\";" ^
+  "  $lines=(ExtractProblems 'ERROR' $rErr (Split-Path $fp -Leaf))-join \"`n\";" ^
+  "  $wlines=(ExtractProblems 'WARNING' $rLint (Split-Path $fp -Leaf))-join \"`n\";" ^
   "  $wc=($rLint-split'\"severity\":\"WARNING\"').Count-1;" ^
   "  $body='Rider ['+$rfStatus+'] — '+$errCount+' error(s) in '+(Split-Path $fp -Leaf)+':'+\"`n\"+$lines;" ^
   "  if($wc -gt 0){$body+=\"`n`n\"+$wc+' fixable warning(s):'+\"`n\"+$wlines};" ^
@@ -312,7 +312,7 @@ powershell -NoProfile -Command ^
   "$warnCount=($rFinal-split'\"severity\":\"WARNING\"').Count-1;" ^
   "Stop-Job $job -EA 0; Remove-Item $sseFile -EA 0;" ^
   "if($warnCount -gt 0){" ^
-  "  $lines=(ExtractProblems 'WARNING' $rFinal)-join \"`n\";" ^
+  "  $lines=(ExtractProblems 'WARNING' $rFinal (Split-Path $fp -Leaf))-join \"`n\";" ^
   "  OutputResult '' '' ('Rider ['+$rfStatus+'] — '+$warnCount+' fixable warning(s) in '+(Split-Path $fp -Leaf)+':'+\"`n\"+$lines)} else {" ^
   "  OutputResult '' '' ('Rider ['+$rfStatus+'] — OK: '+(Split-Path $fp -Leaf))}; exit 0"
 exit /b %ERRORLEVEL%
