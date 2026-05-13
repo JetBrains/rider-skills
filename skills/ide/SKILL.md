@@ -69,6 +69,8 @@ When a `PostToolUse` hook returns `additionalContext` containing Rider quality i
 
 - **Errors present** (hook blocks the edit): fix every listed error now. Use `apply_quick_fix` when a fix name is known; otherwise edit the file directly at the indicated line. After all errors are resolved, summarize: *"Fixed N error(s): • L{line}: {what you did}..."* If warnings were also listed, mention them and ask whether to fix those too.
 - **Warnings listed** (hook does not block): apply `apply_quick_fix` for each warning. Summarize what was fixed.
+- **Pre-existing issues** (existed before your edit): treat them identically — add an explicit step to your plan and fix them. Never dismiss an issue as "pre-existing / not part of this task" and stop. Every issue the hook reports must be resolved.
+- **Pre-existing errors** (errors that existed before your edit, not introduced by you): do not ignore them. Add an explicit step to your plan to fix them — treat them the same as errors you introduced.
 
 ### Critical rules
 
