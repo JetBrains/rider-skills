@@ -128,7 +128,8 @@
 : /usr/bin/curl -s -X POST "$msg" -H "Content-Type: application/json" \
 :   -d '{"jsonrpc":"2.0","method":"notifications/initialized"}' >/dev/null 2>&1
 :
-: # ── STEP 1: fire get_file_problems + lint_files simultaneously ────────────────
+: # ── STEP 1: fire get_file_problems + lint_files + reformat_file simultaneously ──
+: rel_fp=$(printf '%s' "$QC_FP" | sed "s|^$QC_CW/||")
 : /usr/bin/curl -s --max-time 5 -X POST "$msg" \
 :   -H "Content-Type: application/json" \
 :   -d "{\"jsonrpc\":\"2.0\",\"id\":2,\"method\":\"tools/call\",\"params\":{\"name\":\"get_file_problems\",\"arguments\":{\"filePath\":\"$QC_FP\",\"rootFolder\":\"$QC_CW\"}}}" \
@@ -137,18 +138,27 @@
 :   -H "Content-Type: application/json" \
 :   -d "{\"jsonrpc\":\"2.0\",\"id\":3,\"method\":\"tools/call\",\"params\":{\"name\":\"lint_files\",\"arguments\":{\"file_paths\":[\"$QC_FP\"],\"rootFolder\":\"$QC_CW\"}}}" \
 :   >/dev/null 2>&1
+: /usr/bin/curl -s --max-time 5 -X POST "$msg" \
+:   -H "Content-Type: application/json" \
+:   -d "{\"jsonrpc\":\"2.0\",\"id\":4,\"method\":\"tools/call\",\"params\":{\"name\":\"reformat_file\",\"arguments\":{\"path\":\"$rel_fp\",\"rootFolder\":\"$QC_CW\"}}}" \
+:   >/dev/null 2>&1
 :
-: # wait for both responses
-: resp_err=""; resp_lint=""
+: # wait for all three responses
+: resp_err=""; resp_lint=""; resp_fmt=""
 : deadline=$(( $(date +%s) + 30 ))
 : while [ "$(date +%s)" -lt "$deadline" ]; do
 :   [ -z "$resp_err"  ] && resp_err=$(grep  "^data:.*\"id\":2[^0-9]" "$sse" 2>/dev/null | tail -1 | sed 's/^data: //' | tr -d '\r')
 :   [ -z "$resp_lint" ] && resp_lint=$(grep "^data:.*\"id\":3[^0-9]" "$sse" 2>/dev/null | tail -1 | sed 's/^data: //' | tr -d '\r')
-:   [ -n "$resp_err" ] && [ -n "$resp_lint" ] && break
+:   [ -z "$resp_fmt"  ] && resp_fmt=$(grep  "^data:.*\"id\":4[^0-9]" "$sse" 2>/dev/null | tail -1 | sed 's/^data: //' | tr -d '\r')
+:   [ -n "$resp_err" ] && [ -n "$resp_lint" ] && [ -n "$resp_fmt" ] && break
 :   sleep 0.2
 : done
 :
-: # extract_problems <severity> <resp>
+: fmt_ok=$(printf '%s' "$resp_fmt" | grep -o '"text":"ok"' | head -1)
+: reformat_status="reformat skipped"
+: [ -n "$fmt_ok" ] && reformat_status="reformatted"
+:
+: # extract_problems <severity> <resp> <basename>
 : extract_problems() {
 :   label="$1"; resp="$2"
 :   printf '%s' "$resp" | awk -v lbl="$label" -F'"severity":"' '
@@ -159,7 +169,7 @@
 :         if(length(dd)>1){split(dd[2],de,"\""); desc=de[1]}
 :         ln=0; split($i,ll,"\"line\":")
 :         if(length(ll)>1){split(ll[2],le,","); ln=le[1]+0}
-:         if(desc!="")printf "  line %d: %s\n", ln, desc
+:         if(desc!="")printf "• L%d: %s\n", ln, desc
 :       }
 :     }'
 : }
@@ -192,19 +202,16 @@
 : error_count=$(printf '%s' "$resp_err" | awk -F'"severity":"ERROR"' '{print NF-1}')
 : if [ "${error_count:-0}" -gt 0 ]; then
 :   errors=$(extract_problems "ERROR" "$resp_err")
+:   warns_init=$(extract_problems "WARNING" "$resp_lint")
+:   warn_init_count=$(printf '%s' "$resp_lint" | awk -F'"severity":"WARNING"' '{print NF-1}')
 :   kill "$sse_pid" 2>/dev/null; wait "$sse_pid" 2>/dev/null; rm -f "$sse"
-:   output_result "block" "Critical errors in $(basename "$QC_FP") — fix before proceeding" \
-:     "$(printf '=== ERRORS in %s (edit blocked — fix before proceeding) ===\n%s' "$QC_FP" "$errors")"
+:   body="$(printf 'Rider [%s] — %d error(s) in %s:\n%s' "$reformat_status" "$error_count" "$(basename "$QC_FP")" "$errors")"
+:   [ "${warn_init_count:-0}" -gt 0 ] && body="$(printf '%s\n\n%d fixable warning(s):\n%s' "$body" "$warn_init_count" "$warns_init")"
+:   output_result "block" "Fix errors in $(basename "$QC_FP") before proceeding" "$body"
 :   exit 0
 : fi
 :
-: # ── STEP 2: reformat (path relative to solution root) ────────────────────────
-: rel_fp=$(printf '%s' "$QC_FP" | sed "s|^$QC_CW/||")
-: resp_fmt=$(rpc 4 "tools/call" \
-:   "{\"name\":\"reformat_file\",\"arguments\":{\"path\":\"$rel_fp\",\"rootFolder\":\"$QC_CW\"}}")
-: fmt_ok=$(printf '%s' "$resp_fmt" | grep -o '"text":"ok"' | head -1)
-:
-: # ── STEP 3: post-reformat inspections ────────────────────────────────────────
+: # ── STEP 2: post-reformat inspections ────────────────────────────────────────
 : resp_final=$(rpc 5 "tools/call" \
 :   "{\"name\":\"lint_files\",\"arguments\":{\"file_paths\":[\"$QC_FP\"],\"rootFolder\":\"$QC_CW\"}}")
 :
@@ -212,15 +219,12 @@
 :
 : kill "$sse_pid" 2>/dev/null; wait "$sse_pid" 2>/dev/null; rm -f "$sse"
 :
-: reformat_status="reformat skipped"
-: [ -n "$fmt_ok" ] && reformat_status="reformatted"
-:
 : if [ "${warn_count:-0}" -gt 0 ]; then
 :   warns=$(extract_problems "WARNING" "$resp_final")
 :   output_result "" "" \
-:     "$(printf '[%s] %s\n=== FIXABLE WARNINGS ===\n%s' "$reformat_status" "$QC_FP" "$warns")"
+:     "$(printf 'Rider [%s] — %d fixable warning(s) in %s:\n%s' "$reformat_status" "$warn_count" "$(basename "$QC_FP")" "$warns")"
 : else
-:   output_result "" "" "[$reformat_status] Quality OK: $QC_FP"
+:   output_result "" "" "Rider [${reformat_status}] — OK: $(basename "$QC_FP")"
 : fi
 : exit 0
 :# --end--
@@ -275,35 +279,40 @@ powershell -NoProfile -Command ^
   "    foreach($l in ($c-split\"`n\")){if($l-match \"^data:.*`\"id`\":${id}[^0-9]\"){return($l-replace'^data: ','')}}}; return $null};" ^
   "function ExtractProblems($lbl,$resp){" ^
   "  [regex]::Matches($resp,'\"severity\":\"'+$lbl+'\".*?\"description\":\"([^\"]+)\".*?\"line\":(\d+)') | ForEach-Object {" ^
-  "    '  line '+$_.Groups[2].Value+': '+$_.Groups[1].Value}};" ^
+  "    '• L'+$_.Groups[2].Value+': '+$_.Groups[1].Value}};" ^
   "function OutputResult($decision,$reason,$msg){" ^
   "  $h=@{hookSpecificOutput=@{hookEventName='PostToolUse';additionalContext=$msg}};" ^
   "  if($decision){$h.hookSpecificOutput['decision']=$decision;$h['reason']=$reason};" ^
   "  Write-Host ($h|ConvertTo-Json -Compress -Depth 5)};" ^
   "Rpc 1 'initialize' '{\"protocolVersion\":\"2024-11-05\",\"capabilities\":{},\"clientInfo\":{\"name\":\"qc-hook\",\"version\":\"1\"}}' | Out-Null;" ^
   "try{Invoke-RestMethod -Method POST -Uri $msg -CT 'application/json' -Body '{\"jsonrpc\":\"2.0\",\"method\":\"notifications/initialized\"}' -EA Stop}catch{};" ^
+  "$relFp=$fp -replace [regex]::Escape($cw+'\\'),'';" ^
   "try{Invoke-RestMethod -Method POST -Uri $msg -CT 'application/json' -Body \"{`\"jsonrpc`\":`\"2.0`\",`\"id`\":2,`\"method`\":`\"tools/call`\",`\"params`\":{`\"name`\":`\"get_file_problems`\",`\"arguments`\":{`\"filePath`\":`\"$fp`\",`\"rootFolder`\":`\"$cw`\"}}}`\" -EA Stop}catch{};" ^
   "try{Invoke-RestMethod -Method POST -Uri $msg -CT 'application/json' -Body \"{`\"jsonrpc`\":`\"2.0`\",`\"id`\":3,`\"method`\":`\"tools/call`\",`\"params`\":{`\"name`\":`\"lint_files`\",`\"arguments`\":{`\"file_paths`\":[`\"$fp`\"],`\"rootFolder`\":`\"$cw`\"}}}`\" -EA Stop}catch{};" ^
-  "$rErr=$null;$rLint=$null;$dl=(Get-Date).AddSeconds(30);" ^
+  "try{Invoke-RestMethod -Method POST -Uri $msg -CT 'application/json' -Body \"{`\"jsonrpc`\":`\"2.0`\",`\"id`\":4,`\"method`\":`\"tools/call`\",`\"params`\":{`\"name`\":`\"reformat_file`\",`\"arguments`\":{`\"path`\":`\"$relFp`\",`\"rootFolder`\":`\"$cw`\"}}}`\" -EA Stop}catch{};" ^
+  "$rErr=$null;$rLint=$null;$rFmt=$null;$dl=(Get-Date).AddSeconds(30);" ^
   "while((Get-Date)-lt $dl){$c=try{Get-Content $sseFile -Raw}catch{''};" ^
   "  foreach($l in ($c-split\"`n\")){" ^
   "    if(-not $rErr  -and $l-match '^data:.*\"id\":2[^0-9]'){$rErr=$l-replace'^data: ',''};" ^
-  "    if(-not $rLint -and $l-match '^data:.*\"id\":3[^0-9]'){$rLint=$l-replace'^data: ',''}}" ^
-  "  if($rErr -and $rLint){break}; Start-Sleep -ms 200};" ^
+  "    if(-not $rLint -and $l-match '^data:.*\"id\":3[^0-9]'){$rLint=$l-replace'^data: ',''};" ^
+  "    if(-not $rFmt  -and $l-match '^data:.*\"id\":4[^0-9]'){$rFmt=$l-replace'^data: ',''}}" ^
+  "  if($rErr -and $rLint -and $rFmt){break}; Start-Sleep -ms 200};" ^
+  "$rfStatus=if($rFmt -match '\"text\":\"ok\"'){'reformatted'}else{'reformat skipped'};" ^
   "$errCount=($rErr-split'\"severity\":\"ERROR\"').Count-1;" ^
   "if($errCount -gt 0){" ^
   "  $lines=(ExtractProblems 'ERROR' $rErr)-join \"`n\";" ^
+  "  $wlines=(ExtractProblems 'WARNING' $rLint)-join \"`n\";" ^
+  "  $wc=($rLint-split'\"severity\":\"WARNING\"').Count-1;" ^
+  "  $body='Rider ['+$rfStatus+'] — '+$errCount+' error(s) in '+(Split-Path $fp -Leaf)+':'+\"`n\"+$lines;" ^
+  "  if($wc -gt 0){$body+=\"`n`n\"+$wc+' fixable warning(s):'+\"`n\"+$wlines};" ^
   "  Stop-Job $job -EA 0;Remove-Item $sseFile -EA 0;" ^
-  "  OutputResult 'block' ('Critical errors in '+(Split-Path $fp -Leaf)+' -- fix before proceeding') ('=== ERRORS in '+$fp+' (edit blocked) ==='+\"`n\"+$lines);" ^
+  "  OutputResult 'block' ('Fix errors in '+(Split-Path $fp -Leaf)+' before proceeding') $body;" ^
   "  exit 0};" ^
-  "$relFp=$fp -replace [regex]::Escape($cw+'\\'),'';" ^
-  "$rFmt=Rpc 4 'tools/call' \"{`\"name`\":`\"reformat_file`\",`\"arguments`\":{`\"path`\":`\"$relFp`\",`\"rootFolder`\":`\"$cw`\"}}\";" ^
-  "$rfStatus=if($rFmt -match '\"text\":\"ok\"'){'reformatted'}else{'reformat skipped'};" ^
   "$rFinal=Rpc 5 'tools/call' \"{`\"name`\":`\"lint_files`\",`\"arguments`\":{`\"file_paths`\":[`\"$fp`\"],`\"rootFolder`\":`\"$cw`\"}}\";" ^
   "$warnCount=($rFinal-split'\"severity\":\"WARNING\"').Count-1;" ^
   "Stop-Job $job -EA 0; Remove-Item $sseFile -EA 0;" ^
   "if($warnCount -gt 0){" ^
   "  $lines=(ExtractProblems 'WARNING' $rFinal)-join \"`n\";" ^
-  "  OutputResult '' '' ('['+$rfStatus+'] '+$fp+\"`n=== FIXABLE WARNINGS ===`n\"+$lines)} else {" ^
-  "  OutputResult '' '' ('['+$rfStatus+'] Quality OK: '+$fp)}; exit 0"
+  "  OutputResult '' '' ('Rider ['+$rfStatus+'] — '+$warnCount+' fixable warning(s) in '+(Split-Path $fp -Leaf)+':'+\"`n\"+$lines)} else {" ^
+  "  OutputResult '' '' ('Rider ['+$rfStatus+'] — OK: '+(Split-Path $fp -Leaf))}; exit 0"
 exit /b %ERRORLEVEL%

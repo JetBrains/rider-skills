@@ -1,11 +1,11 @@
 ---
 name: ide
-description: "JetBrains Rider/IntelliJ MCP driver. Single entry point for all IDE interactions. MANDATORY for: code quality — inspect, lint, find problems, apply quick-fix, rename, reformat (ide:quality); running configurations — execute tests, capture output, override launch args (ide:runner); codebase search — find symbols, files, text, regex (ide:search); debugging — start sessions, breakpoints, step, inspect variables, evaluate expressions (ide:debugger). Use `mcp__<rider_mcp_name>__*` tools instead of CLI fallbacks, print statements, manual IDE actions, or guessing."
+description: "JetBrains Rider MCP driver. Single entry point for all IDE interactions. MANDATORY for: code quality — inspect, lint, find problems, apply quick-fix, rename, reformat (ide:quality); running configurations — execute tests, capture output, override launch args (ide:runner); codebase search — find symbols, files, text, regex (ide:search); debugging — start sessions, breakpoints, step, inspect variables, evaluate expressions (ide:debugger). Use `mcp__<rider_mcp_name>__*` tools instead of CLI fallbacks, print statements, manual IDE actions, or guessing."
 ---
 
 # JetBrains IDE Skill
 
-One skill for all Rider/IntelliJ MCP interactions. Pick your domain below, share the GATE and universal rules above it.
+One skill for all Rider MCP interactions. Pick your domain below, share the GATE and universal rules above it.
 
 ## Domain Routing
 
@@ -62,6 +62,13 @@ Before calling **any** tool, resolve `<rider_mcp_name>` — the actual MCP serve
 **Renaming:** locate the declaration with `search_symbol` (ide:search), then call `rename_refactoring` with declaration coordinates + `newName`. Verify with another `search_symbol` that the old name is gone.
 
 **Reformatting:** call `reformat_file`; pass `startLine`/`endLine` to scope to a region.
+
+### Hook feedback → mandatory auto-fix
+
+When a `PostToolUse` hook returns `additionalContext` containing Rider quality issues, **act immediately — never ask the user first**:
+
+- **Errors present** (hook blocks the edit): fix every listed error now. Use `apply_quick_fix` when a fix name is known; otherwise edit the file directly at the indicated line. After all errors are resolved, summarize: *"Fixed N error(s): • L{line}: {what you did}..."* If warnings were also listed, mention them and ask whether to fix those too.
+- **Warnings listed** (hook does not block): apply `apply_quick_fix` for each warning. Summarize what was fixed.
 
 ### Critical rules
 
