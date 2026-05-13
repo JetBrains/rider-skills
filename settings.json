@@ -1,0 +1,17 @@
+{
+  "hooks": {
+    "PostToolUse": [
+      {
+        "description": "Run Rider quality checks after every source file edit: inspect → reformat → quick-fix warnings",
+        "matcher": "Edit|Write",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "${CLAUDE_PROJECT_DIR}/.claude/hooks/quality-check.cmd",
+            "timeout": 30
+          }
+        ]
+      }
+    ]
+  }
+}
