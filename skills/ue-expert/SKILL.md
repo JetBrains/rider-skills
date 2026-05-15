@@ -1,26 +1,23 @@
 ---
 name: ue:expert
-description: "Universal Unreal Engine expert. Use for ANY UE work: C++ code (ue:coder), GAS abilities (ue:gas), Enhanced Input (ue:input), animation, networking/replication, physics/collision, AI/BT, debugging crashes, build/compile, graphics/rendering (Nanite/Lumen/shaders), PCG, level design, plugins, cinematics/Sequencer, GameplayCues, profiling, and testing. Single entry point for all UE domains."
-context: fork
-agent: general-purpose
-allowed-tools: Read, Glob, Grep, Bash, Write, Edit
-argument-hint: "[UE task description]"
+description: "Universal Unreal Engine domain expert. Use for ANY UE work: C++ code (ue:coder), GAS abilities (ue:gas), Enhanced Input (ue:input), animation, networking/replication, physics/collision, AI/BT, debugging crashes, build/compile, graphics/rendering (Nanite/Lumen/shaders), PCG, level design, plugins, cinematics/Sequencer, GameplayCues, profiling, and testing. The *what*: domain rules, pitfalls, patterns, knowledge files. For the *how* — driving the Unreal Editor through the JetBrains Rider MCP server (`ue_*`, asset/tag index, Live Coding, PIE, Python automation, long-running build/cook/package) — use the `ide-ue` skill."
 ---
-
-See Context7 Protocol]
 
 # Unreal Engine Expert
 
-One skill for all UE work. Use the routing table to find your domain, read the relevant knowledge files, then implement.
+One skill for all UE domain knowledge. Use the routing table to find your domain, read the relevant knowledge files, then implement.
+
+All Rider / Unreal Editor MCP driving — `ue_health`, `ue_trigger_build`, `ue_get_logs`, `ue_play_control`, `search_assets`, `get_class_hierarchy`, `ue_execute_python`, the MCP-first pipelines, long-running build/cook/package protocols — lives in the **`ide-ue`** skill. Consult that skill any time you need to actually drive the editor. This skill is the *what* (UE patterns, pitfalls, domain rules); `ide-ue` is the *how* (MCP plumbing).
 
 ## Checklist
 
 1. **Route** — identify domain, find knowledge files in the table below
-2. **Read** — read domain guide + reference files before writing anything
-3. **Pre-flight** — grep existing source for patterns; read Build.cs and 1-2 nearby files
-4. **Implement** — write code matching project conventions
-5. **Build** — run `scripts/ue-build.sh`; fix all errors before proceeding
-6. **Verify** — test in PIE; check Output Log for warnings/errors
+2. **MCP probe** (via `ide-ue:editor`) — call `ue_health` to confirm the editor is connected; pick MCP tools over CLI when both exist
+3. **Read** — read domain guide + reference files before writing anything
+4. **Pre-flight** — grep existing source for patterns; read Build.cs and 1-2 nearby files
+5. **Implement** — write code matching project conventions
+6. **Build** (via `ide-ue:build`) — `ue_trigger_build` (Live Coding) when editor is up; fall back to `scripts/ue-build.sh` for headless / structural changes
+7. **Verify** (via `ide-ue:editor`) — `ue_play_control("play")` to enter PIE; `ue_get_logs` to inspect Output Log for warnings/errors
 
 ---
 
@@ -36,6 +33,22 @@ One skill for all UE work. Use the routing table to find your domain, read the r
 8. **UE units are centimeters** — velocity = cm/s, distance = cm; 100 UU = 1 meter; `LaunchVelocity.Z = √(2 × 980 × HeightCM)`
 
 ---
+
+## Rider MCP — see the `ide-ue` skill
+
+All Unreal-aware MCP plumbing lives in the **`ide-ue`** skill. Consult it whenever you need to actually drive the editor. It covers:
+
+- **`ide-ue:editor`** — `ue_health`, `ue_get_play_state`, `ue_set_play_mode`, `ue_play_control`, `ue_get_logs`.
+- **`ide-ue:build`** — `ue_trigger_build` (Live Coding), `build` / `build_solution`, target discovery, `get_file_problems` / `lint_files`.
+- **`ide-ue:assets`** — `search_assets`, `get_class_hierarchy`, `get_asset_properties`, `search_tags`.
+- **`ide-ue:blueprint`** — `ue_find_blueprint_usages`, `ue_open_blueprint`.
+- **`ide-ue:python`** — `ue_execute_python`, `ue_execute_python_batch`.
+- **`ide-ue:pipelines`** — canonical P1 (C++ → Live Coding → PIE), P2 (BP discovery), P3 (tag refactor), P4 (crash debug), P5/P6 (Python automation), P7 (PIE networking repro), P8 (CDO inspection).
+- **`ide-ue:long-ops`** — helper scripts, build / clean / package wrappers, and the mandatory background protocol for builds / cooks / packages (`run_in_background`, `Monitor`, `ScheduleWakeup`).
+
+For non-UE IDE concerns — symbol search, refactors, debugger (xdebug), run configurations — see the **`ide`** skill.
+
+This skill keeps only the UE *domain knowledge*: the routing table, per-domain critical rules, and the knowledge file index.
 
 ## Domain Routing Table
 
@@ -128,16 +141,17 @@ One skill for all UE work. Use the routing table to find your domain, read the r
 7. **EQS filters first, then scores** — overly aggressive filter returns zero results; check filters first
 
 ### Debugging
-1. **Check Output Log FIRST** — answer is almost always in `LogPython`, `LogTemp`, `LogScript`; filter for `Error`/`Warning`/`Fatal`
+1. **Check Output Log FIRST** — answer is almost always in `LogPython`, `LogTemp`, `LogScript`; use `ue_get_logs { minVerbosity: "Warning" }` rather than tailing `Saved/Logs/*.log` — it's already structured
 2. **GC crash = missing `UPROPERTY()`** — crash at `0xDDDDDD..` address = use-after-free; add `UPROPERTY()` or `TWeakObjectPtr<>`
 3. **`check()` is stripped in Shipping** — side effects inside `check()` vanish; use `ensure()` for non-fatal checks
 4. **Hot reload corrupts BP state** — structural C++ changes (new UPROPERTY, changed hierarchy) require full editor restart
 5. **Package crash ≠ editor crash** — `FSoftObjectPath` references that work in-editor may fail in cooked builds
 
 ### Build
-1. **Prefer Live Coding when editor is running** — `ue-build.sh` auto-detects; only `--force-ubt` when Live Coding fails with crash
-2. **CDO mismatch / `Trying to recreate changed class`** — escalate to `--force-ubt` + editor restart
+1. **Prefer Live Coding when editor is running** — `ue_trigger_build` (MCP) is the fastest path; `ue-build.sh` is the shell fallback. Only escalate to `--force-ubt` when Live Coding rejects the change
+2. **CDO mismatch / `Trying to recreate changed class`** — escalate to `--force-ubt` + editor restart (Live Coding cannot recover)
 3. **Build failed = stale binary** — NEVER launch editor or proceed when build reports failure
+4. **MCP build poll, not block** — `ue_trigger_build` returns immediately. Poll `ue_get_logs { category: "LogLiveCoding" }` until `Code successfully patched` or `Patch failed`; do not assume completion
 
 ### C++ Coding
 1. **`#include "ClassName.generated.h"` last in `.h`; `#include "ClassName.h"` first in `.cpp`**
@@ -189,25 +203,6 @@ One skill for all UE work. Use the routing table to find your domain, read the r
 2. **Camera Cuts track must be TOPMOST** — rendering order is top-to-bottom; out-of-order = wrong camera at render
 3. **Use Movie Render Queue, not Sequencer "Render Movie"** — MRQ is production pipeline with proper AA and tiling
 4. **Audio assets must be imported first** — Sequencer cannot reference external files; import as `USoundWave` first
-
----
-
-## Build Script
-
-```bash
-# Auto-detects Live Coding when editor is running
-bash ${CLAUDE_SKILL_DIR}/scripts/ue-build.sh \
-  --project "/path/to/Game.uproject" \
-  --platform Mac --config Development --target Editor
-
-# Clean intermediate artifacts
-bash ${CLAUDE_SKILL_DIR}/scripts/ue-clean.sh --project "/path/to/Game.uproject"
-```
-
-Escalation path:
-- Editor running → Live Coding (default)
-- Live Coding crash (CDO mismatch) → `--force-ubt` + restart editor
-- Persistent crash → `ue-clean.sh` + `--force-ubt` + restart
 
 ---
 

@@ -3,228 +3,66 @@
 :; j=$(cat|tr -d '\n'); fp=$(printf '%s' "$j"|awk -F'"file_path":"' 'NF>1{split($2,a,"\"");print a[1];exit}'); [ -z "$fp" ]&&exit 0; ext=$(printf '%s' "${fp##*.}"|tr '[:upper:]' '[:lower:]'); case "$ext" in cpp|cxx|cc|c|h|hpp|hxx|inl|cs|ts|tsx|js|jsx|mts|mjs|kt|kts|java|groovy|go|rs|swift|py);;*)exit 0;;esac; [ -f "$fp" ]||exit 0; cw=$(printf '%s' "$j"|awk -F'"cwd":"' 'NF>1{split($2,a,"\"");print a[1];exit}'); export QC_FP="$fp" QC_CW="$cw"
 :; T=$(mktemp /tmp/qc.XXXXXX); QC_HOOKS_DIR="$(cd "$(dirname "$0")" 2>/dev/null && pwd)"; export QC_HOOKS_DIR; awk '/^: #!\/bin\/sh/{f=1} f{if(/^:# --end--/)exit; sub(/^: ?/,""); print}' "$0">"$T"; sh "$T"; ec=$?; rm -f "$T"; exit $ec
 : #!/bin/sh
-: # JetBrains MCP quality-check: errors + inspections → reformat → report all
-: # Inputs: QC_FP, QC_CW, QC_HOOKS_DIR — exported by the :; detection lines.
+: # PostToolUse quality-check: reformat + get_file_problems → block on errors, warn on warnings.
+: # Inputs: QC_FP, QC_CW, QC_HOOKS_DIR — exported by the :; launcher lines.
+: . "$QC_HOOKS_DIR/mcp-lib.sh"
 :
-: # ── Port discovery ────────────────────────────────────────────────────────────
-:
-: # Step 1: detect IDE type from .idea folder → config directory name prefix
-: # Returns e.g. "Rider", "IntelliJIdea", "PyCharm", "CLion", "WebStorm"
-: _ide_prefix_from_idea() {
-:   local d="$1" sub f root
-:   [ -d "$d" ] || return
-:   root=$(dirname "$d")
-:   # Rider: .idea.*.dir/ subdirectory (C++/Unreal/CMake directory-based project)
-:   for sub in "$d"/.idea.*.dir; do [ -d "$sub" ] && { printf 'Rider'; return; }; done
-:   # Rider: *.sln.iml present (C# .NET solution)
-:   for f in "$d"/*.sln.iml; do [ -f "$f" ] && { printf 'Rider'; return; }; done
-:   # Rider: RiderProjectSettingsUpdater in top-level or nested projectSettingsUpdater.xml
-:   for f in "$d/projectSettingsUpdater.xml" "$d"/.idea.*.dir/.idea/projectSettingsUpdater.xml; do
-:     grep -q "RiderProjectSettingsUpdater" "$f" 2>/dev/null && { printf 'Rider'; return; }
-:   done
-:   # Rider: *.uproject in project root (Unreal Engine)
-:   for f in "$root"/*.uproject; do [ -f "$f" ] && { printf 'Rider'; return; }; done
-:   # Rider: *.sln in project root
-:   for f in "$root"/*.sln; do [ -f "$f" ] && { printf 'Rider'; return; }; done
-:   # IntelliJ IDEA: languageLevel in misc.xml → Java project
-:   grep -q "languageLevel" "$d/misc.xml" 2>/dev/null && { printf 'IntelliJIdea'; return; }
-:   # PyCharm: PYTHON_MODULE in any .iml file
-:   for f in "$d"/*.iml; do
-:     [ -f "$f" ] && grep -q "PYTHON_MODULE" "$f" 2>/dev/null && { printf 'PyCharm'; return; }
-:   done
-:   # WebStorm: WEB_MODULE in any .iml file
-:   for f in "$d"/*.iml; do
-:     [ -f "$f" ] && grep -q "WEB_MODULE" "$f" 2>/dev/null && { printf 'WebStorm'; return; }
-:   done
-:   # CLion: CMakeLists.txt in project root (no .sln found above)
-:   [ -f "$root/CMakeLists.txt" ] && { printf 'CLion'; return; }
-: }
-:
-: idea_prefix=$(_ide_prefix_from_idea "$QC_CW/.idea")
-:
-: # Step 2: source jbr.cmd to detect the running IDE installation; sets RIDER_JAVA
-: . "$QC_HOOKS_DIR/jbr.cmd" 2>/dev/null
-:
-: port=""
-: # Step 3: derive exact config path from RIDER_JAVA (most precise — specific version)
-: if [ -n "$RIDER_JAVA" ]; then
-:   case "$(uname -s)" in
-:     Darwin)
-:       bundle=$(printf '%s' "$RIDER_JAVA" | sed 's|/Contents/jbr/.*||')
-:       if [ -d "$bundle" ]; then
-:         ide_name=$(basename "$bundle" .app)
-:         ide_ver=$(defaults read "$bundle/Contents/Info" CFBundleShortVersionString 2>/dev/null \
-:           | awk -F. '{printf "%s.%s",$1,$2}')
-:         xml="$HOME/Library/Application Support/JetBrains/${ide_name}${ide_ver}/options/mcpServer.xml"
-:         [ -f "$xml" ] && port=$(awk -F'"' '/mcpServerPort/{print $4;exit}' "$xml")
-:       fi
-:       ;;
-:     Linux)
-:       ide_root=$(printf '%s' "$RIDER_JAVA" | sed 's|/jbr/bin/java||')
-:       if [ -f "$ide_root/product-info.json" ]; then
-:         data_dir=$(awk -F'"dataDirectoryName":"' 'NF>1{split($2,a,"\"");print a[1];exit}' \
-:           "$ide_root/product-info.json")
-:         xml="$HOME/.config/JetBrains/${data_dir}/options/mcpServer.xml"
-:         [ -f "$xml" ] && port=$(awk -F'"' '/mcpServerPort/{print $4;exit}' "$xml")
-:       fi
-:       ;;
-:   esac
-: fi
-:
-: # Step 4: .idea prefix → targeted glob (narrows to the right IDE when multiple are installed)
-: if [ -z "$port" ] && [ -n "$idea_prefix" ]; then
-:   port=$(awk -F'"' '/mcpServerPort/{print $4;exit}' \
-:     "$HOME/Library/Application Support/JetBrains/${idea_prefix}"*/options/mcpServer.xml \
-:     "$HOME/.config/JetBrains/${idea_prefix}"*/options/mcpServer.xml \
-:     2>/dev/null | head -1)
-: fi
-:
-: # Step 5: broad fallback — any JetBrains IDE config dir
-: if [ -z "$port" ]; then
-:   port=$(awk -F'"' '/mcpServerPort/{print $4;exit}' \
-:     "$HOME/Library/Application Support/JetBrains/"*/options/mcpServer.xml \
-:     "$HOME/.config/JetBrains/"*/options/mcpServer.xml \
-:     2>/dev/null | head -1)
-: fi
-: port=${port:-64343}
-: base="http://localhost:${port}"
-:
-: # ── SSE connection ────────────────────────────────────────────────────────────
-: sse=$(mktemp /tmp/qc_sse.XXXXXX)
-: /usr/bin/curl -s --no-buffer --max-time 90 -N "${base}/sse" >> "$sse" 2>/dev/null &
-: sse_pid=$!
-:
-: sess=""
-: for _i in 1 2 3 4 5 6 7 8 9 10 11 12 13 14 15; do
-:   sess=$(grep -o 'sessionId=[^ "]*' "$sse" 2>/dev/null | head -1 | sed 's/sessionId=//' | tr -d '\r')
-:   [ -n "$sess" ] && break
-:   sleep 0.2
-: done
-: if [ -z "$sess" ]; then
-:   kill "$sse_pid" 2>/dev/null; wait "$sse_pid" 2>/dev/null; rm -f "$sse"
-:   exit 0   # IDE not running or MCP unavailable — skip silently
-: fi
-: msg="${base}/message?sessionId=${sess}"
-:
-: # rpc <id> <method> <params_json>  →  prints raw SSE response line, returns 1 on timeout
-: rpc() {
-:   /usr/bin/curl -s --max-time 5 -X POST "$msg" \
-:     -H "Content-Type: application/json" \
-:     -d "{\"jsonrpc\":\"2.0\",\"id\":$1,\"method\":\"$2\",\"params\":$3}" \
-:     >/dev/null 2>&1
-:   deadline=$(( $(date +%s) + 25 ))
-:   while [ "$(date +%s)" -lt "$deadline" ]; do
-:     line=$(grep "^data:.*\"id\":${1}[^0-9]" "$sse" 2>/dev/null | tail -1 | sed 's/^data: //' | tr -d '\r')
-:     [ -n "$line" ] && { printf '%s' "$line"; return 0; }
-:     sleep 0.2
-:   done
-:   return 1
-: }
-:
-: # Initialize MCP session
-: rpc 1 "initialize" \
-:   '{"protocolVersion":"2024-11-05","capabilities":{},"clientInfo":{"name":"qc-hook","version":"1"}}' \
-:   >/dev/null
-: /usr/bin/curl -s -X POST "$msg" -H "Content-Type: application/json" \
-:   -d '{"jsonrpc":"2.0","method":"notifications/initialized"}' >/dev/null 2>&1
-:
-: # ── STEP 1: fire get_file_problems + lint_files + reformat_file simultaneously ──
+: # ── STEP 1: fire get_file_problems + reformat_file simultaneously ──
+: # Pass both `projectPath` (IntelliJ MCP) and `rootFolder` (Rider MCP) — unknown keys are ignored.
 : rel_fp=$(printf '%s' "$QC_FP" | sed "s|^$QC_CW/||")
+: pp_args="\"filePath\":\"$QC_FP\",\"projectPath\":\"$QC_CW\",\"rootFolder\":\"$QC_CW\",\"errorsOnly\":false"
 : /usr/bin/curl -s --max-time 5 -X POST "$msg" \
 :   -H "Content-Type: application/json" \
-:   -d "{\"jsonrpc\":\"2.0\",\"id\":2,\"method\":\"tools/call\",\"params\":{\"name\":\"get_file_problems\",\"arguments\":{\"filePath\":\"$QC_FP\",\"rootFolder\":\"$QC_CW\"}}}" \
+:   -d "{\"jsonrpc\":\"2.0\",\"id\":2,\"method\":\"tools/call\",\"params\":{\"name\":\"get_file_problems\",\"arguments\":{${pp_args}}}}" \
 :   >/dev/null 2>&1
 : /usr/bin/curl -s --max-time 5 -X POST "$msg" \
 :   -H "Content-Type: application/json" \
-:   -d "{\"jsonrpc\":\"2.0\",\"id\":3,\"method\":\"tools/call\",\"params\":{\"name\":\"lint_files\",\"arguments\":{\"file_paths\":[\"$QC_FP\"],\"rootFolder\":\"$QC_CW\"}}}" \
-:   >/dev/null 2>&1
-: /usr/bin/curl -s --max-time 5 -X POST "$msg" \
-:   -H "Content-Type: application/json" \
-:   -d "{\"jsonrpc\":\"2.0\",\"id\":4,\"method\":\"tools/call\",\"params\":{\"name\":\"reformat_file\",\"arguments\":{\"path\":\"$rel_fp\",\"rootFolder\":\"$QC_CW\"}}}" \
+:   -d "{\"jsonrpc\":\"2.0\",\"id\":4,\"method\":\"tools/call\",\"params\":{\"name\":\"reformat_file\",\"arguments\":{\"path\":\"$rel_fp\",\"projectPath\":\"$QC_CW\",\"rootFolder\":\"$QC_CW\"}}}" \
 :   >/dev/null 2>&1
 :
-: # wait for all three responses
-: resp_err=""; resp_lint=""; resp_fmt=""
+: resp_err=""; resp_fmt=""
 : deadline=$(( $(date +%s) + 30 ))
 : while [ "$(date +%s)" -lt "$deadline" ]; do
-:   [ -z "$resp_err"  ] && resp_err=$(grep  "^data:.*\"id\":2[^0-9]" "$sse" 2>/dev/null | tail -1 | sed 's/^data: //' | tr -d '\r')
-:   [ -z "$resp_lint" ] && resp_lint=$(grep "^data:.*\"id\":3[^0-9]" "$sse" 2>/dev/null | tail -1 | sed 's/^data: //' | tr -d '\r')
-:   [ -z "$resp_fmt"  ] && resp_fmt=$(grep  "^data:.*\"id\":4[^0-9]" "$sse" 2>/dev/null | tail -1 | sed 's/^data: //' | tr -d '\r')
-:   [ -n "$resp_err" ] && [ -n "$resp_lint" ] && [ -n "$resp_fmt" ] && break
+:   [ -z "$resp_err" ] && resp_err=$(grep "^data:.*\"id\":2[^0-9]" "$sse" 2>/dev/null | tail -1 | sed 's/^data: //' | tr -d '\r')
+:   [ -z "$resp_fmt" ] && resp_fmt=$(grep "^data:.*\"id\":4[^0-9]" "$sse" 2>/dev/null | tail -1 | sed 's/^data: //' | tr -d '\r')
+:   [ -n "$resp_err" ] && [ -n "$resp_fmt" ] && break
 :   sleep 0.2
 : done
 :
-: fmt_ok=$(printf '%s' "$resp_fmt" | grep -o '"text":"ok"' | head -1)
 : reformat_status="reformat skipped"
-: [ -n "$fmt_ok" ] && reformat_status="reformatted"
+: printf '%s' "$resp_fmt" | grep -q '"text":"ok"' && reformat_status="reformatted"
 :
-: # extract_problems <severity> <resp> <basename>
-: extract_problems() {
-:   label="$1"; resp="$2"; file="$3"
-:   printf '%s' "$resp" | awk -v lbl="$label" -v f="$file" -F'"severity":"' '
-:     NF>1{
-:       for(i=2;i<=NF;i++){
-:         split($i,sv,"\""); if(sv[1]!=lbl) continue
-:         desc=""; split($i,dd,"\"description\":\"")
-:         if(length(dd)>1){split(dd[2],de,"\""); desc=de[1]}
-:         ln=0; split($i,ll,"\"line\":")
-:         if(length(ll)>1){split(ll[2],le,","); ln=le[1]+0}
-:         if(desc!="")printf "[%s] %s:%d: %s\n", lbl, f, ln, desc
-:       }
-:     }'
-: }
-:
-: # JSON-escape a string: \ → \\ , " → \" , tab → \t , newlines → \n
-: _jesc() {
-:   printf '%s' "$1" | awk 'BEGIN{ORS=""} {
-:     gsub(/\\/, "\\\\"); gsub(/"/, "\\\""); gsub(/\t/, "\\t")
-:     if(NR>1) printf "\\n"
-:     printf "%s",$0
-:   }'
-: }
-:
-: # output_result <decision|""> <reason|""> <message>
-: # Always exits 0; decision="block" makes Claude Code block the edit.
-: output_result() {
-:   local decision="$1" reason="$2" msg="$3"
-:   local esc_msg esc_reason
-:   esc_msg=$(_jesc "$msg")
-:   if [ -n "$decision" ]; then
-:     esc_reason=$(_jesc "$reason")
-:     printf '{"hookSpecificOutput":{"hookEventName":"PostToolUse","additionalContext":"%s","decision":"%s"},"reason":"%s"}\n' \
-:       "$esc_msg" "$decision" "$esc_reason"
-:   else
-:     printf '{"hookSpecificOutput":{"hookEventName":"PostToolUse","additionalContext":"%s"}}\n' "$esc_msg"
-:   fi
-: }
-:
-: # ── Check for critical errors (blocking) ─────────────────────────────────────
+: # ── Check for errors (blocking) ───────────────────────────────────────────────
 : error_count=$(printf '%s' "$resp_err" | awk -F'"severity":"ERROR"' '{print NF-1}')
 : if [ "${error_count:-0}" -gt 0 ]; then
-:   errors=$(extract_problems "ERROR" "$resp_err" "$(basename "$QC_FP")")
-:   warns_init=$(extract_problems "WARNING" "$resp_lint" "$(basename "$QC_FP")")
-:   warn_init_count=$(printf '%s' "$resp_lint" | awk -F'"severity":"WARNING"' '{print NF-1}')
+:   fname=$(basename "$QC_FP")
+:   errors=$(extract_problems "ERROR" "$resp_err" "$fname")
+:   warns_init=$(printf '%s\n%s' "$(extract_problems "WARNING" "$resp_err" "$fname")" "$(extract_problems "WEAK_WARNING" "$resp_err" "$fname")" | sed '/^$/d')
+:   warn_init_w=$(printf '%s' "$resp_err" | awk -F'"severity":"WARNING"' '{print NF-1}')
+:   warn_init_ww=$(printf '%s' "$resp_err" | awk -F'"severity":"WEAK_WARNING"' '{print NF-1}')
+:   warn_init_count=$(( warn_init_w + warn_init_ww ))
 :   kill "$sse_pid" 2>/dev/null; wait "$sse_pid" 2>/dev/null; rm -f "$sse"
-:   body="$(printf 'Rider [%s] — %d error(s) in %s:\n%s' "$reformat_status" "$error_count" "$(basename "$QC_FP")" "$errors")"
+:   body="$(printf 'IDE [%s] — %d error(s) in %s:\n%s' "$reformat_status" "$error_count" "$fname" "$errors")"
 :   [ "${warn_init_count:-0}" -gt 0 ] && body="$(printf '%s\n\n%d fixable warning(s):\n%s' "$body" "$warn_init_count" "$warns_init")"
-:   output_result "block" "Fix errors in $(basename "$QC_FP") before proceeding" "$body"
+:   output_result "block" "Fix errors in $fname before proceeding" "$body"
 :   exit 0
 : fi
 :
-: # ── STEP 2: post-reformat inspections ────────────────────────────────────────
+: # ── STEP 2: post-reformat warnings ───────────────────────────────────────────
 : resp_final=$(rpc 5 "tools/call" \
-:   "{\"name\":\"lint_files\",\"arguments\":{\"file_paths\":[\"$QC_FP\"],\"rootFolder\":\"$QC_CW\"}}")
+:   "{\"name\":\"get_file_problems\",\"arguments\":{\"filePath\":\"$QC_FP\",\"projectPath\":\"$QC_CW\",\"rootFolder\":\"$QC_CW\",\"errorsOnly\":false}}")
 :
-: warn_count=$(printf '%s' "$resp_final" | awk -F'"severity":"WARNING"' '{print NF-1}')
-:
+: warn_w=$(printf '%s' "$resp_final" | awk -F'"severity":"WARNING"' '{print NF-1}')
+: warn_ww=$(printf '%s' "$resp_final" | awk -F'"severity":"WEAK_WARNING"' '{print NF-1}')
+: warn_count=$(( warn_w + warn_ww ))
 : kill "$sse_pid" 2>/dev/null; wait "$sse_pid" 2>/dev/null; rm -f "$sse"
 :
+: fname=$(basename "$QC_FP")
 : if [ "${warn_count:-0}" -gt 0 ]; then
-:   warns=$(extract_problems "WARNING" "$resp_final" "$(basename "$QC_FP")")
-:   output_result "" "" \
-:     "$(printf 'Rider [%s] — %d fixable warning(s) in %s:\n%s' "$reformat_status" "$warn_count" "$(basename "$QC_FP")" "$warns")"
+:   warns=$(printf '%s\n%s' "$(extract_problems "WARNING" "$resp_final" "$fname")" "$(extract_problems "WEAK_WARNING" "$resp_final" "$fname")" | sed '/^$/d')
+:   output_result "" "" "$(printf 'IDE [%s] — %d fixable warning(s) in %s:\n%s' "$reformat_status" "$warn_count" "$fname" "$warns")"
 : else
-:   output_result "" "" "Rider [${reformat_status}] — OK: $(basename "$QC_FP")"
+:   output_result "" "" "IDE [${reformat_status}] — OK: $fname"
 : fi
 : exit 0
 :# --end--
@@ -301,18 +139,18 @@ powershell -NoProfile -Command ^
   "$errCount=($rErr-split'\"severity\":\"ERROR\"').Count-1;" ^
   "if($errCount -gt 0){" ^
   "  $lines=(ExtractProblems 'ERROR' $rErr (Split-Path $fp -Leaf))-join \"`n\";" ^
-  "  $wlines=(ExtractProblems 'WARNING' $rLint (Split-Path $fp -Leaf))-join \"`n\";" ^
-  "  $wc=($rLint-split'\"severity\":\"WARNING\"').Count-1;" ^
-  "  $body='Rider ['+$rfStatus+'] — '+$errCount+' error(s) in '+(Split-Path $fp -Leaf)+':'+\"`n\"+$lines;" ^
+  "  $wlines=((ExtractProblems 'WARNING' $rLint (Split-Path $fp -Leaf))+(ExtractProblems 'WEAK_WARNING' $rLint (Split-Path $fp -Leaf)))-join \"`n\";" ^
+  "  $wc=($rLint-split'\"severity\":\"WARNING\"').Count-1 + ($rLint-split'\"severity\":\"WEAK_WARNING\"').Count-1;" ^
+  "  $body='IDE ['+$rfStatus+'] — '+$errCount+' error(s) in '+(Split-Path $fp -Leaf)+':'+\"`n\"+$lines;" ^
   "  if($wc -gt 0){$body+=\"`n`n\"+$wc+' fixable warning(s):'+\"`n\"+$wlines};" ^
   "  Stop-Job $job -EA 0;Remove-Item $sseFile -EA 0;" ^
   "  OutputResult 'block' ('Fix errors in '+(Split-Path $fp -Leaf)+' before proceeding') $body;" ^
   "  exit 0};" ^
   "$rFinal=Rpc 5 'tools/call' \"{`\"name`\":`\"lint_files`\",`\"arguments`\":{`\"file_paths`\":[`\"$fp`\"],`\"rootFolder`\":`\"$cw`\"}}\";" ^
-  "$warnCount=($rFinal-split'\"severity\":\"WARNING\"').Count-1;" ^
+  "$warnCount=($rFinal-split'\"severity\":\"WARNING\"').Count-1 + ($rFinal-split'\"severity\":\"WEAK_WARNING\"').Count-1;" ^
   "Stop-Job $job -EA 0; Remove-Item $sseFile -EA 0;" ^
   "if($warnCount -gt 0){" ^
-  "  $lines=(ExtractProblems 'WARNING' $rFinal (Split-Path $fp -Leaf))-join \"`n\";" ^
-  "  OutputResult '' '' ('Rider ['+$rfStatus+'] — '+$warnCount+' fixable warning(s) in '+(Split-Path $fp -Leaf)+':'+\"`n\"+$lines)} else {" ^
-  "  OutputResult '' '' ('Rider ['+$rfStatus+'] — OK: '+(Split-Path $fp -Leaf))}; exit 0"
+  "  $lines=((ExtractProblems 'WARNING' $rFinal (Split-Path $fp -Leaf))+(ExtractProblems 'WEAK_WARNING' $rFinal (Split-Path $fp -Leaf)))-join \"`n\";" ^
+  "  OutputResult '' '' ('IDE ['+$rfStatus+'] — '+$warnCount+' fixable warning(s) in '+(Split-Path $fp -Leaf)+':'+\"`n\"+$lines)} else {" ^
+  "  OutputResult '' '' ('IDE ['+$rfStatus+'] — OK: '+(Split-Path $fp -Leaf))}; exit 0"
 exit /b %ERRORLEVEL%

@@ -8,3 +8,10 @@ or we need provide ENV VARIBLe with current IDE Directory
 
 ## TASK
 Found the problem at line 43, column 9. However, apply_quick_fix is not available in this Rider MCP installation — it ships only with the PhpStorm/JetBrains MCP module, which isn't connected here.
+
+## TASK
+action in MCP for all type of projects like in UI button 
+
+
+## TASK
+save chousen params in CLaude Agent and other AIA ACP agents

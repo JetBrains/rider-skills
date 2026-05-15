@@ -1,11 +1,11 @@
 ---
 name: ide
-description: "JetBrains Rider MCP driver. Single entry point for all IDE interactions. MANDATORY for: code quality — inspect, lint, find problems, apply quick-fix, rename, reformat (ide:quality); running configurations — execute tests, capture output, override launch args (ide:runner); codebase search — find symbols, files, text, regex (ide:search); debugging — start sessions, breakpoints, step, inspect variables, evaluate expressions (ide:debugger). Use `mcp__<rider_mcp_name>__*` tools instead of CLI fallbacks, print statements, manual IDE actions, or guessing."
+description: "Generic IDE MCP driver. Single entry point for all IDE interactions. MANDATORY for: code quality — inspect, lint, find problems, apply quick-fix, rename, reformat (ide:quality); running configurations — execute tests, capture output, override launch args (ide:runner); codebase search — find symbols, files, text, regex (ide:search); debugging — start sessions, breakpoints, step, inspect variables, evaluate expressions (ide:debugger). Use `mcp__<ide_mcp_name>__*` tools instead of CLI fallbacks, print statements, manual IDE actions, or guessing."
 ---
 
-# JetBrains IDE Skill
+# Generic IDE Skill
 
-One skill for all Rider MCP interactions. Pick your domain below, share the GATE and universal rules above it.
+One skill for all IDE MCP interactions. Pick your domain below, share the GATE and universal rules above it.
 
 ## Domain Routing
 
@@ -18,14 +18,14 @@ One skill for all Rider MCP interactions. Pick your domain below, share the GATE
 
 ---
 
-## GATE — Resolve the Rider MCP server name first
+## GATE — Resolve the IDE MCP server name first
 
-Before calling **any** tool, resolve `<rider_mcp_name>` — the actual MCP server prefix. The string `mcp__<rider_mcp_name>__` is a placeholder; the real prefix varies per install (`rider`, `jetbrains`, `intellij`, `rider-mcp`, `jetbrains-ide`, etc.).
+Before calling **any** tool, resolve `<ide_mcp_name>` — the actual MCP server prefix. The string `mcp__<ide_mcp_name>__` is a placeholder; the real prefix varies per install (`ide`, `jetbrains`, `intellij`, `ide-mcp`, `jetbrains-ide`, etc.).
 
 **Detection (in order):**
-1. Scan the deferred tool list in `<system-reminder>` for any clearly Rider/IntelliJ-flavored tool (e.g. `lint_files`, `get_file_problems`, `xdebug_*`, `execute_run_configuration`, `search_symbol`, `build_solution`). Take the prefix between `mcp__` and the second `__`. Example: `mcp__jetbrains__lint_files` → `<rider_mcp_name>` = `jetbrains`.
+1. Scan the deferred tool list in `<system-reminder>` for any clearly IDE-flavored tool (e.g. `lint_files`, `get_file_problems`, `xdebug_*`, `execute_run_configuration`, `search_symbol`, `reformat_file`). Take the prefix between `mcp__` and the second `__`. Example: `mcp__jetbrains__lint_files` → `<ide_mcp_name>` = `jetbrains`.
 2. Prefer the prefix that owns the broadest family of matching tools.
-3. **If nothing found** — STOP and tell the user: *"I can't find the Rider/JetBrains MCP server. Please make sure Rider is running with the MCP server enabled and the client is connected, then ask me again."*
+3. **If nothing found** — STOP and tell the user: *"I can't find the IDE MCP server. Please make sure the IDE is running with the MCP server enabled and the client is connected, then ask me again."*
 4. **Cache the resolved name for the rest of the session.** Never re-resolve on every step.
 
 ## Universal Rules
@@ -65,7 +65,7 @@ Before calling **any** tool, resolve `<rider_mcp_name>` — the actual MCP serve
 
 ### Hook feedback → mandatory auto-fix
 
-When a `PostToolUse` hook returns `additionalContext` containing Rider quality issues, **act immediately — never ask the user first**:
+When a `PostToolUse` hook returns `additionalContext` containing IDE quality issues, **act immediately — never ask the user first**:
 
 - **Errors present** (hook blocks the edit): fix every listed error now. Use `apply_quick_fix` when a fix name is known; otherwise edit the file directly at the indicated line. After all errors are resolved, summarize: *"Fixed N error(s): • L{line}: {what you did}..."* If warnings were also listed, mention them and ask whether to fix those too.
 - **Warnings listed** (hook does not block): apply `apply_quick_fix` for each warning. Summarize what was fixed.
@@ -77,8 +77,7 @@ When a `PostToolUse` hook returns `additionalContext` containing Rider quality i
 - `apply_quick_fix` coordinates must come from a **fresh** inspection call — any prior write shifts line numbers.
 - `fixName` must be the **exact** string from `get_inspections` — never paraphrase or guess.
 - `rename_refactoring` is atomic across all usages — never edit identifier text manually.
-- `apply_quick_fix` ships only with the PhpStorm/JetBrains MCP module. If unavailable, tell the user.
-- `run_inspection_kts`/`generate_psi_tree` require the Qodana inspectionKts module.
+- `apply_quick_fix`, `run_inspection_kts`, `generate_psi_tree` may not be exposed by every IDE MCP server. If unavailable, tell the user which MCP module is needed.
 - No MCP tools exist for move / safe-delete / extract / change-signature — tell the user to do these in the IDE.
 
 ---
@@ -200,12 +199,12 @@ When tools are reached through a CLI dispatcher using `--paramName value` format
 - **`sessionId` is stale once a session stops** — refresh via `xdebug_get_debugger_status`.
 - **No JSON-escaping in `expression`/`newValue`** — pass raw source text.
 - **`breakpointsMuted` requires a dedicated call** with only `sessionId`+`breakpointsMuted` — do not mix with other params.
-- **Tracepoint output (`breakpointErrorsTail`, `tracepointOutputsTail`) is JVM-only.** On .NET/Rider expect empty arrays — confirm hits via paused state or hit counts.
-- `xdebug_set_breakpoint` does not validate `condition` — invalid conditions surface later. On .NET, verify by observing whether the session actually pauses.
+- **Tracepoint output (`breakpointErrorsTail`, `tracepointOutputsTail`) is JVM-only.** On non-JVM runtimes expect empty arrays — confirm hits via paused state or hit counts.
+- `xdebug_set_breakpoint` does not validate `condition` — invalid conditions surface later. On non-JVM runtimes, verify by observing whether the session actually pauses.
 - **Prefer evidence from these tools over reasoning from source.** Evaluate, don't guess.
 
 ### Pitfalls from past sessions
 
 - `BREAKPOINT_ERROR` entries from `control_session(STOP)`/`DRAIN_EVENTS` — even in files you didn't touch — often indicate stale user-owned breakpoints worth surfacing.
-- Rider may emit *"breakpoint will not currently be hit"* before symbols finish loading at session start. Treat as informational; the BP can still bind once the module loads.
+- The IDE may emit *"breakpoint will not currently be hit"* before symbols finish loading at session start. Treat as informational; the BP can still bind once the module loads.
 - `xdebug_remove_breakpoint owner=agent` does not touch user-owned breakpoints. Target user BPs by `breakpointId` when the user agreed to clear them.
