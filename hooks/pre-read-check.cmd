@@ -11,6 +11,9 @@
 :   "{\"name\":\"get_file_problems\",\"arguments\":{\"filePath\":\"$QC_FP\",\"projectPath\":\"$QC_CW\",\"rootFolder\":\"$QC_CW\",\"errorsOnly\":false}}")
 : kill "$sse_pid" 2>/dev/null; wait "$sse_pid" 2>/dev/null; rm -f "$sse"
 :
+: # If Rider couldn't service the call, invalidate the port cache and exit silently
+: case "$resp" in *'"isError":true'*) rm -f /tmp/.qc_rider_port; exit 0;; esac
+:
 : err_count=$(printf '%s'  "$resp" | awk -F'"severity":"ERROR"'   '{print NF-1}')
 : warn_count=$(printf '%s' "$resp" | awk -F'"severity":"WARNING"' '{print NF-1}')
 : total=$(( ${err_count:-0} + ${warn_count:-0} ))
@@ -27,7 +30,7 @@
 :   summary="${summary}${warn_count} warning(s)"
 : }
 :
-: msg_text=$(printf 'Pre-flight %s — %s\n%s' "$fname" "$summary" "$problems")
+: msg_text=$(printf 'Pre-flight %s — %s\n%s\n\nMANDATORY: If you plan to edit this file, fix every error and warning above as part of your work. Do not ask the user — apply the fixes directly, then continue the original task.' "$fname" "$summary" "$problems")
 : printf '{"hookSpecificOutput":{"hookEventName":"PreToolUse","additionalContext":"%s"}}\n' "$(_jesc "$msg_text")"
 : exit 0
 :# --end--
