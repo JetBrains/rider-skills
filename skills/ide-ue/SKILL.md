@@ -7,15 +7,16 @@ description: "Rider Unreal Engine MCP driver — the UE-specific surface only. E
 
 One skill for all UE-flavored MCP interactions against the **JetBrains Rider MCP Server** (Rider 2026.2+). Pick your domain below, share the GATE and universal rules above it.
 
-For UE domain knowledge (GAS, Animation, Networking pitfalls, C++ patterns, etc.) use the **`ue-expert`** skill. This skill is the MCP driver only.
+> **Pair with the `ue-expert` skill — the *what* lives there, the *how* lives here.**
+> `ue-expert` carries the UE domain knowledge: GAS, Enhanced Input, animation, networking/replication, physics/collision, AI/BT, crash anatomy, rendering (Nanite/Lumen/shaders), PCG, Sequencer, GameplayCues, plus the project-wide universal rules (no `GetWorld()` in constructors, `UPROPERTY` lifetime rules, UE units, etc.). This skill (`ide-ue`) is the MCP driver — `ue_*` tools, asset/tag/CDO indices, PIE, Live Coding, Python automation, long-running build/cook/package. Whenever a pipeline below says "decide whether to do X" (Live Coding vs. full rebuild, GameplayTag taxonomy, ability vs. component design, crash root cause), the *decision* belongs to `ue-expert`; once decided, drive it through `ide-ue`.
 
 ## Domain Routing
 
 | Domain | Trigger | Key tools |
 |--------|---------|-----------|
-| **ide-ue:editor** | health, PIE play/pause/stop/frame_skip, mode + players + flags, log streaming, combined status pulse | `ue_health`, `ue_play`, `ue_status`, `ue_get_logs` |
+| **ide-ue:editor** | health, PIE play/pause/stop/frame_skip, mode + players + flags, log streaming, combined status pulse, persistent log-tail Monitor for warnings/errors (P9) | `ue_health`, `ue_play`, `ue_status`, `ue_get_logs`, `Monitor` |
 | **ide-ue:build** | UE-specific addenda (runner-dispatch confirmation via `ps`, Live Coding log verification, cook/package RunUAT template) on top of **`ide:build`** | — (delegates to `ide:build`) |
-| **ide-ue:assets** | find `.uasset`/`.umap`, derived BPs of a C++ class, CDO defaults, GameplayTags | `search_assets`, `get_class_hierarchy`, `get_asset_properties`, `search_tags` |
+| **ide-ue:assets** | find `.uasset`/`.umap`, derived BPs of a C++ class (full hierarchy incl. abstract bases), CDO defaults, per-field default overrides across descendants, GameplayTags | `search_assets`, `get_class_hierarchy`, `get_asset_properties`, `find_default_value_overrides`, `search_tags` |
 | **ide-ue:python** | run editor Python — single script or resumable batch via one tool | `ue_execute_python` |
 | **ide-ue:pipelines** | canonical MCP-first workflows | composes the above |
 | **ide-ue:long-ops** | UE-specific cook/package monitor-filter cheatsheet on top of **`ide:long-ops`** | — (delegates to `ide:long-ops`) |
@@ -267,22 +268,26 @@ ue_status(count=5, minVerbosity="Warning")
 
 | Tool | Purpose | Notes |
 |------|---------|-------|
-| `search_assets` | Find `.uasset`/`.umap` by name **or** by derived `baseClass` (e.g. `ALyraCharacter`) | Filename glob is case-insensitive; `baseClass` traverses inheritance |
-| `get_class_hierarchy` | Lists all Blueprints inheriting from a C++ class (full chain) | Use to enumerate concrete BPs of an abstract base; `limit` defaults 1000 |
+| `search_assets` | Find `.uasset`/`.umap` by name **or** by derived `baseClass` (e.g. `LyraCharacter`) | Filename glob is case-insensitive; `baseClass` walks the **full C++ inheritance closure** — abstract / `NotBlueprintable` bases work, returns BPs of every concrete subclass. |
+| `get_class_hierarchy` | Lists all Blueprints inheriting from a C++ class (full chain) | Walks the **full C++ inheritance closure** — abstract / `NotBlueprintable` bases descend correctly. `limit` defaults 1000. |
 | `get_asset_properties` | Dumps CDO property values from a `.uasset` (absolute path required) | Read default values without opening the editor |
+| `find_default_value_overrides` | For a `UPROPERTY` field, list every BP whose CDO overrides its default value | Returns `{ assetPath, instanceName, typeName, value }` per override. Mirrors Rider's gutter `"<value>" (Default__BP_C)` next to UPROPERTY declarations. |
 | `search_tags` | Search GameplayTag definitions across `.uasset` files; supports `prefix` filter | Use before adding new tags to avoid duplicates / collisions |
 
 ### Workflow
 
-1. **Find by name or class.** `search_assets { query: "BP_Hero" }` or `search_assets { baseClass: "ALyraCharacter" }`.
-2. **Enumerate descendants.** `get_class_hierarchy { baseClass: ..., limit: 5000 }` for the full BP tree.
-3. **Inspect defaults.** `get_asset_properties { assetPath: "/abs/.../Foo.uasset" }` (absolute filesystem path).
-4. **Audit tags.** `search_tags { prefix: "Ability.Damage" }` before adding new tags.
+1. **Find by name or class.** `search_assets { query: "BP_Hero" }` or `search_assets { baseClass: "LyraCharacter" }`.
+2. **Enumerate descendants.** `get_class_hierarchy { baseClass: "LyraCameraMode", limit: 5000 }` for the full BP tree — including BPs that inherit only via concrete C++ subclasses of an abstract base.
+3. **Inspect one BP's CDO.** `get_asset_properties { assetPath: "/abs/.../Foo.uasset" }` (absolute filesystem path).
+4. **Find every override of one field across the hierarchy.** `find_default_value_overrides { className: "LyraCameraMode", fieldName: "FieldOfView" }` — returns the BPs that differ from the C++ default plus the textual value each one stores.
+5. **Audit tags.** `search_tags { prefix: "Ability.Damage" }` before adding new tags.
 
 ### Critical rules
 
 - **`get_asset_properties` requires absolute filesystem path**, not `/Game/...` package path.
-- **`baseClass` is case-sensitive** and must match the C++ identifier exactly (including the `A`/`U`/`F` prefix).
+- **`baseClass` and `className` accept either UE convention.** Bare name (`LyraCameraMode`) or C++ form with prefix (`ULyraCameraMode`) both match — the backend probes the C++ symbol cache with every UE class prefix (`U`/`A`/`F`/`S`/`H`/`T`/`E`/`I`) when the input is unprefixed. **Do NOT use the `/Script/Module.Class` FQN** — that form is rejected. Matching is case-sensitive on the identifier itself.
+- **`get_class_hierarchy` and `search_assets { baseClass }` descend through `Abstract` / `NotBlueprintable` bases.** The backend builds the full C++ inheritance closure (root + every direct/indirect subclass) before consulting the BP index, so a query against `ULyraCameraMode` returns BPs of `ULyraCameraMode_ThirdPerson`, `ULyraCameraMode_TopDownArenaCamera`, etc. without you having to enumerate concrete subclasses yourself.
+- **`find_default_value_overrides` reads CDO data from Rider's index, not the running editor.** Works whether or not `ue_health` reports `connected`. The `value` field is the textual presentation UE generates for the property type (e.g. `"70"` for a float, `"Lyra.Weapon.SteadyAimingCamera"` for an `FGameplayTag`); fields whose property type has no `ValuePresentation` (struct-only members) are omitted.
 - **None of these tools need the editor connected.** Use them even when `ue_health` reports `connected = false`.
 
 ---
@@ -307,14 +312,40 @@ The python execution surface is a **single tool**, `ue_execute_python`, that acc
 
 1. Build the script list as an array of independently re-runnable Python snippets.
 2. `ue_execute_python { scripts: [...], startFrom: 0 }`.
-3. On failure: response carries `lastSuccessfulIndex`. Fix the offender.
-4. Re-call with `startFrom: lastSuccessfulIndex + 1`. Idempotency of each step is your responsibility.
+3. On failure: response contains `lastSuccessfulIndex`. Fix the offender.
+4. Re-call with `startFrom: lastSuccessfulIndex + 1` — never replay completed steps (idempotency is on you).
 
 ### Critical rules
 
 - **Runs on the game thread.** Long scripts block the editor UI. Keep snippets short.
 - **Batch is sequential, not parallel.** For parallelism, structure the work inside a single Python script using subsystems / async tasks.
+- **`script` is compiled with `compile(..., 'single')` — only one statement.** Multi-line scripts (`import unreal\nfoo()`) raise `SyntaxError: multiple statements found while compiling a single statement`. Two workarounds, in order of preference:
+  - **Semicolon-join** when the body is one short line: `import unreal; asset = unreal.EditorAssetLibrary.load_asset('/Game/X'); …`. A chain of `;`-separated statements compiles as one and avoids the file dance.
+  - **`exec(open(...))`** for anything multi-line: write the body to `/tmp/foo.py`, then `script="exec(open('/tmp/foo.py').read())"`. The `exec()` call is itself a single statement, so `compile(..., 'single')` accepts it; the file body runs unrestricted.
 - **Reference: https://dev.epicgames.com/documentation/en-us/unreal-engine/python-api/**
+
+### UE Python API cheatsheet (5.7-tested)
+
+| Goal | Snippet | Notes |
+|---|---|---|
+| Load asset by package path | `bp = unreal.EditorAssetLibrary.load_asset('/Game/B_X')` | Use `/Game/...`, **not** the absolute `.uasset` path. |
+| Open asset in editor | `unreal.get_editor_subsystem(unreal.AssetEditorSubsystem).open_editor_for_assets([bp])` | Returns `True` on success. No MCP wrapper for this any more. |
+| Get the generated class | `gen = bp.generated_class()` | The `*_C` class — what `unreal.get_default_object` takes. |
+| Read the CDO | `cdo = unreal.get_default_object(gen)` | Class Default Object — UPROPERTY defaults live here. |
+| Read a UPROPERTY value | `cdo.get_editor_property('default_pawn_class')` | Snake-case the C++ name. Falls back to `AttributeError`; wrap in try/except when iterating `dir(cdo)`. |
+| Iterate components on an AActor CDO | `cdo.get_components_by_class(unreal.ActorComponent)` | Empty list for non-Actor CDOs (e.g. GameMode-config-only BPs that own no SCS components). |
+| C++ inheritance chain | `t = type(cdo); while t and t.__name__ != 'object': chain.append(t.__name__); t = t.__bases__[0]` | `BlueprintGeneratedClass` does **not** expose `get_superclass()`; walk the Python class projection instead. |
+| AssetRegistry data | `ar = unreal.AssetRegistryHelpers.get_asset_registry(); ad = ar.get_asset_by_object_path(unreal.Name(bp.get_path_name()))` | Old overload — deprecated in 5.7 (warning, still works). Prefer `unreal.SoftObjectPath(bp.get_path_name())` when 5.7+ types are accepted. |
+| Asset-registry tags (parent class, etc.) | `ad.get_tag_value('ParentClass')`, `ad.get_tag_value('NativeParentClass')`, `ad.get_tag_value('ImplementedInterfaces')` | Always-available metadata without parsing the .uasset. |
+| Find derived BPs of any C++ class (incl. abstract) | `unreal.AssetRegistryHelpers.get_asset_registry().get_assets_by_class(... )` | Or prefer the MCP **`get_class_hierarchy`** tool — Rider's index is faster and works without the editor running. |
+
+### UE Python API gotchas
+
+- **`unreal.SystemLibrary.get_class_property_names` / `get_class_function_names` do NOT exist.** Don't reach for them — there is no first-class UE-Python reflection API for "list every UPROPERTY/UFUNCTION on a class". Walk `dir(cdo)` and probe with `get_editor_property`, or read the AssetRegistry tags.
+- **`bp.parent_class` and `bp.simple_construction_script` are not Python attributes.** They look like UPROPERTYs on the `UBlueprint`, but only `get_editor_property('parent_class')` / `'simple_construction_script'` works — and even those return `None` in 5.7. Use the C++ inheritance chain from `type(cdo).__bases__` and the AssetRegistry `ParentClass` tag instead.
+- **`ubergraph_pages` / `function_graphs` / `macro_graphs` are not Python-accessible.** No reliable UE Python API exposes Blueprint graph contents. For graph introspection either parse the `.uasset` via Rider's index (the MCP asset tools already do this for CDO data) or fall back to C++ editor internals.
+- **`dir(cdo)` reflection logs `DeprecationWarning` for renamed Actor properties** (`life_span` → `initial_life_span`, `on_actor_touch` → `on_actor_begin_overlap`, `on_actor_un_touch` → `on_actor_end_overlap`). Cosmetic noise — the values are still readable; skip those keys explicitly if you want a quiet log.
+- **`Class.get_superclass()` does not exist on `BlueprintGeneratedClass`.** Walk `type(cdo).__bases__` instead.
 
 ---
 
@@ -323,6 +354,8 @@ The python execution surface is a **single tool**, `ue_execute_python`, that acc
 Canonical workflows composing the domains above. Follow them step-for-step; do not invent shortcuts.
 
 ### P1. C++ edit → Live Coding → verify in PIE
+
+> **Domain decisions first.** Before editing, consult **`ue-expert`** for the *what*: which UCLASS / UPROPERTY conventions apply (no `GetWorld()` in constructors, `TObjectPtr<>`, lifetime/GC rules), whether this is a GAS / Input / Network / Replication concern, what Lyra's modular plugin pattern expects. The steps below only cover the MCP plumbing — they don't tell you *what* to change.
 
 1. `ue_status` — confirm editor connected (else fall back to UBT-only flow).
 2. `read_file` / `search_symbol` to locate target.
@@ -339,12 +372,15 @@ Canonical workflows composing the domains above. Follow them step-for-step; do n
 
 ### P2. Discover Blueprints derived from a C++ class
 
-1. `search_assets { baseClass: "ALyraWeaponInstance" }` — fast filename-only result.
-2. `get_class_hierarchy { baseClass: "ALyraWeaponInstance", limit: 5000 }` — full descendant list with paths.
+1. `get_class_hierarchy { baseClass: "LyraWeaponInstance", limit: 5000 }` — single call. The backend walks the full C++ inheritance closure, so abstract / `NotBlueprintable` bases (e.g. `ULyraCameraMode`) return BPs of every concrete subclass without you having to enumerate them first. Either UE-form (`LyraWeaponInstance`) or C++-form (`ULyraWeaponInstance`) is accepted.
+2. (Alternative entry) `search_assets { baseClass: "LyraWeaponInstance" }` — same hierarchy traversal, plus optional `query` filter on the BP name.
 3. `get_asset_properties` on selected paths to compare CDOs without opening the editor.
-4. Visual inspection requires the editor's own UI — there is no MCP "open blueprint" tool any more; navigate via Rider's Solution Explorer or the editor itself.
+4. **One field across the whole hierarchy:** `find_default_value_overrides { className, fieldName }` — returns every BP whose CDO overrides that UPROPERTY, with the textual value. Matches Rider's gutter `"<value>" (Default__BP_C)`.
+5. Visual inspection requires the editor's own UI — there is no MCP "open blueprint" tool any more; navigate via Rider's Solution Explorer or the editor itself.
 
 ### P3. Audit / refactor a GameplayTag
+
+> **Tag taxonomy is a domain call.** Naming, hierarchy depth, "is this a state tag or an event tag", redirector rules — all live in **`ue-expert`** (`ue:gas` knowledge). Use this pipeline for the mechanics; consult `ue-expert` for *what* tag to introduce or *whether* to merge.
 
 1. `search_tags { prefix: "Ability.Damage" }` — enumerate existing tags.
 2. `search_text` for the tag's literal in `.cpp`/`.h`.
@@ -353,6 +389,8 @@ Canonical workflows composing the domains above. Follow them step-for-step; do n
 5. `ue_get_logs(category="LogGameplayTags", minVerbosity="Warning")` — confirm no unresolved tag warnings.
 
 ### P4. Crash / nullptr investigation
+
+> **Interpretation is a `ue-expert` task.** This pipeline gets you the crash dump, stack, and live variables. *Diagnosing* "GC reclaimed an unmanaged `UObject*`", "`GetWorld()` in CDO construction", "RPC reliability buffer overflow" etc. is UE domain knowledge — route through **`ue-expert`** for the universal-rules / GAS / Networking pages.
 
 1. `ue_get_logs(minVerbosity="Error", count=500)` — pull the actual crash output, not a guess.
 2. `xdebug_get_debugger_status` — if a session is attached, dump it; else start one.
@@ -388,6 +426,55 @@ Canonical workflows composing the domains above. Follow them step-for-step; do n
 1. `search_assets { query: "BP_Hero" }` — get the `.uasset` path.
 2. `get_asset_properties { assetPath: "/abs/path/.../BP_Hero.uasset" }`.
 3. Diff against expected defaults. No MCP "open blueprint" tool — inspect visually via the editor UI if needed.
+
+### P9. Recommended setup: tail UE editor logs in the background as warnings/errors arrive
+
+Whenever you're driving the editor over multiple turns (Python introspection, PIE iteration, asset edits), arm a persistent `Monitor` that long-polls `ue_get_logs` and surfaces each Warning+ entry as its own notification. Catches silent UE script errors, deprecation warnings from your own probes, RiderLink assertions, and `LogPython` tracebacks the moment they're emitted — instead of waiting for the next `ue_get_logs` pull to discover them.
+
+**Setup (one-shot per session):**
+
+1. Drop a tailer script at `/tmp/ue-log-tail.py` (or anywhere persistent) that:
+   - reuses your existing MCP client (e.g. `mcp_call.py`),
+   - calls `ue_get_logs` with `minVerbosity="Warning"`, a noise-resistant `pattern` (`(?i)error|fatal|assert|crash|exception|failed|cannot|warning`), `follow=true`, `followTimeoutMs=25000`,
+   - advances a `sinceTimestampMs` cursor as `entries[-1].timestampMs + 1` between polls,
+   - **applies a client-side deny-list before printing** (see "Telemetry noise" below) — the MCP `pattern` is positive-match only,
+   - prints **one line per entry** that survives the deny-list to stdout with `print(..., flush=True)` so each becomes a Monitor event.
+2. Arm:
+   ```
+   Monitor(
+     description="UE editor warnings/errors",
+     persistent=true,
+     timeout_ms=3600000,
+     command="python3 -u /tmp/ue-log-tail.py",
+   )
+   ```
+3. Keep working — events arrive in-chat as the editor logs.
+
+**Telemetry noise — deny-list these categories and phrases by default:**
+
+When the dev machine is offline or behind a captive portal, UE/EOS retry telemetry forever and saturate any "Warning+" stream. Both belong in the tailer's client-side deny-list (the server-side `pattern` can't exclude — it's positive-match only):
+
+| Layer | Drop | Why |
+|---|---|---|
+| Category | `LogEOSSDK` | Epic Online Services SDK config + telemetry retries (per-minute when offline) |
+| Category | `LogHttp` | Generic engine HTTP probes, incl. Apple's `google.com/generate_204` connectivity check (per-30s when offline) |
+| Message substring (case-insensitive) | `internet connection appears to be offline` | Backup catch — any category emitting offline-retry chatter |
+| Message substring | `sdkconfig`, `sdk config product update request` | EOS retry backoff loop |
+| Message substring | `telemetry` | Anyone phoning home |
+
+If a category is *normally* useful but a single recurring message is noise, drop on the substring — don't blanket-ban the category. Example: `LogNet` is critical for replication work; don't deny-list it just because one offline-only warning keeps firing.
+
+**Critical rules:**
+
+- **One stdout line per entry.** Multi-line tracebacks are batched within 200ms into a single notification, so let the tailer print each `entry.message[:400]` on its own line with a `[Category][Verbosity]` prefix; the chunker groups related lines naturally.
+- **Server-side long-poll, not client-side polling.** `follow=true` blocks the MCP call up to `followTimeoutMs`. That avoids tight loops; one Python subprocess per ~25s is fine. Don't drop `follow=true` and busy-loop — you'll burn tokens for nothing.
+- **`Warning+` minimum, never `Verbose`.** Unfiltered the buffer is dominated by `LogEOSSDK` background polling, audio mixer chatter, and per-frame log noise. Always require `minVerbosity` plus a pattern. If you suspect a bug is hiding below Warning, narrow on `category` instead of dropping the verbosity floor.
+- **Cursor must advance even when every entry is denied.** Initialize to `int(time.time() * 1000)` so historical noise doesn't flood, then advance to `last.timestampMs + 1` regardless of whether the entries survived the deny-list — otherwise the next poll re-pulls and re-discards the same noise on a tight loop.
+- **Monitor events are not user input.** When you act on the next user message, don't treat an interleaved monitor notification as confirmation or as a question being answered. Surface what's useful, keep working.
+- **If the monitor starts flooding the chat, stop and tighten — don't tolerate it.** The harness auto-kills monitors that emit too many events; restart with a wider deny-list rather than letting one bad pattern drown signal.
+- **Stop with `TaskStop`** before you switch projects or the editor restarts on a different port — the tailer hard-codes `MCP_URL`. Re-arm against the new endpoint.
+
+**When to skip this:** purely-offline asset queries (`search_assets`, `get_class_hierarchy`, `find_default_value_overrides`, `get_asset_properties`) don't touch the editor; no log stream to watch. If `ue_health.connected = false` the buffer is empty anyway.
 
 ---
 
