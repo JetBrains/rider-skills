@@ -285,11 +285,21 @@ Builds, cooks, packages, large test runs — anything that takes longer than a c
 
    **Option B — `ScheduleWakeup`** at 270 s (cache-warm) or 1200 s+ (cache-miss) intervals. On wake, tail the log and `ps` the PID. Use this when the log is too quiet for line-driven monitoring, or as a safety net alongside Monitor (Monitor gives real-time; ScheduleWakeup catches silent stalls).
 
-3. **Report only what is true.** Do not claim "a monitor is armed" unless you actually called `Monitor`. Do not claim "running in background" if `run_in_background` was false. The honest status report after launch lists: PID, log path, exactly which monitor / wakeup is registered (and what its filter watches for).
+3. **Do not reply to heartbeat events.** Heartbeat notifications (`[N/M] Compile …`, `Cooked packages N00`, `Archiving N shaders`, `Adding file to pak`, etc.) are ambient progress signal — they exist so the user sees the job is alive, **not** so the agent narrates them. Treat them as read-only: ingest, ignore, do not emit a chat turn. A wall of "270/860", "280/860", "290/860" one-line replies is the failure mode this rule exists to prevent — each reply burns a turn for zero new information and visibly annoys the user.
 
-4. **On completion**, tail the last ~100 lines of the log, confirm the success marker, and report whatever the deliverable is (archive path, .dylib path, test summary, elapsed time).
+   Only break silence for one of:
+   - **Phase transitions** (cook→pak→stage→archive boundaries — the markers in the second filter category)
+   - **Errors or warnings worth surfacing** (anything in the first filter category that indicates a real problem)
+   - **Terminal markers** (success / failure / `AutomationTool exiting` / `All done`)
+   - **An unexpectedly long silence** that the user might mistake for "stalled" (e.g. >10 min with no new heartbeat) — in which case a single status check + summary is appropriate, not a tick-by-tick report.
 
-5. **On failure**, grep the log for `error:|ERROR:|Exception|fatal error|LogInit: Warning` near the tail. Show the user the **relevant excerpt**, not the whole log.
+   Same rule applies to any tail/poll Monitor — CI status pollers, deploy log tails, test runs. Heartbeats are weather; transitions and outcomes are news.
+
+4. **Report only what is true.** Do not claim "a monitor is armed" unless you actually called `Monitor`. Do not claim "running in background" if `run_in_background` was false. The honest status report after launch lists: PID, log path, exactly which monitor / wakeup is registered (and what its filter watches for).
+
+5. **On completion**, tail the last ~100 lines of the log, confirm the success marker, and report whatever the deliverable is (archive path, .dylib path, test summary, elapsed time).
+
+6. **On failure**, grep the log for `error:|ERROR:|Exception|fatal error|LogInit: Warning` near the tail. Show the user the **relevant excerpt**, not the whole log.
 
 ### `build_solution_*` specifically
 
