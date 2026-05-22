@@ -159,23 +159,81 @@ This works because `PythonExecutor.cpp` runs non-isolated scripts with `EPythonC
 
 ---
 
-## Alternative paths (when this recipe isn't enough)
+## Three modes side by side
 
-### Enhanced Input injection
+These are the three paths the MCP toolset will expose. Modes 1 and 2 work fully from Python; mode 3 (Enhanced Input) needs a UE-version dependent path or — preferably — a C++ implementation, because the current UE 5.8 Python binding does not expose `ULocalPlayer`.
 
-Use this when you want input to flow through the project's actual IA_Move / IA_Jump bindings (modifiers, triggers, action consumption, etc. all run normally):
+### Mode 1 — High-level actions with durations
+
+The composed pattern from the TL;DR, lifted into a sequencer that walks a list of `{type, ...}` action records on a single tick driver:
 
 ```python
-pc = unreal.GameplayStatics.get_player_controller(pie_world, 0)
-local_player = pc.get_local_player()
-eis = local_player.get_subsystem(unreal.EnhancedInputLocalPlayerSubsystem)
-ia_move = unreal.EditorAssetLibrary.load_asset('/Game/ThirdPerson/Input/IA_Move')
-ia_jump = unreal.EditorAssetLibrary.load_asset('/Game/ThirdPerson/Input/IA_Jump')
-# Injection persists until cleared; pair with a clear call on tear-down.
-eis.inject_input_for_action(ia_move, unreal.InputActionValue.from_axis_2d(unreal.Vector2D(0, 1)), [], [])
+actions = [
+    {"type":"move",  "direction":"forward", "duration":1.0},
+    {"type":"jump",  "duration":0.3},
+    {"type":"move",  "direction":"forward", "duration":0.5},
+    {"type":"look",  "yaw":45.0, "duration":0.5},
+    {"type":"wait",  "duration":0.5},
+]
 ```
 
-The exact IA_* paths depend on the project. For this project's variants, search under `/Game/Variant_*/Input/`.
+Per-tick: read the current action, run the matching primitive (move = add_movement_input, jump = call_method('Jump'), look = add_yaw/pitch_input scaled by `delta / duration`, wait = no-op). When `elapsed >= duration`, advance `i`.
+
+The reference implementation is `_mode_actions` in `D:/Projects/ultimate2/.ai/scratch/ue-prototypes/input_prototype.py`. Validated empirically:
+
+- 1 s forward move → pawn moves ~91 units along forward.
+- jump → `mode` transitions `MOVE_WALKING → MOVE_FALLING`, `z` rises (~+110 units) then settles back.
+
+### Mode 2 — Low-level per-tick primitives
+
+When the caller wants one knob held for N seconds (no sequencing). One MCP call, one tick driver, single primitive per frame:
+
+```python
+# Sustain forward input for 1.5 s — like holding "W".
+def apply():
+    pawn.add_movement_input(pawn.get_actor_forward_vector(), 1.0)
+handle = unreal.register_slate_post_tick_callback(lambda d: apply())
+# … after duration, unregister.
+```
+
+The reference implementation is `_mode_primitives`. Verified: pawn delta ≈ +123 units for `add_movement_input` forward, duration 1.5 s.
+
+### Mode 3 — Enhanced Input injection (C++ path)
+
+Goes through the project's IA_Move / IA_Jump assets so modifiers, triggers, and action consumption all run normally — the "most realistic" path. **Cannot be driven from Python in UE 5.8** because:
+
+- `PlayerController.player` UPROPERTY is protected (`Property 'Player' for attribute 'player' on '<PC>' is protected and cannot be read`).
+- `GetLocalPlayer()` and `GetLocalPlayers()` aren't `UFUNCTION`s — reflection (`pc.call_method('GetLocalPlayer')`) returns "Failed to find function".
+- `unreal.find_object(None, 'LocalPlayer_0')` returns `None` (the LP isn't reachable by name from any outer we tried).
+
+C++ has direct access:
+
+```cpp
+ULocalPlayer* LP = PC->GetLocalPlayer();
+auto* EIS = LP->GetSubsystem<UEnhancedInputLocalPlayerSubsystem>();
+EIS->InjectInputForAction(IA_Move, FInputActionValue(FVector2D(0, 1)), {}, {});
+```
+
+Once C++ is in place the corresponding MCP tool layer surfaces an `inject_for_action` call accepting `(asset_path, value_kind, value)` — and a paired clear/stop. `EnhancedInputLocalPlayerSubsystem` already exposes `start_continuous_input_injection_for_action` / `stop_continuous_input_injection_for_action` in the Python binding, so once we have the EIS instance from C++ (or a future Python-exposed `GetLocalPlayer`) the actual injection plumbing is one call.
+
+The IA asset paths for the validation project (`MyProject58Preview`):
+
+```
+/Game/Input/Actions/IA_Move
+/Game/Input/Actions/IA_Jump
+/Game/Input/Actions/IA_Look
+/Game/Input/Actions/IA_MouseLook
+```
+
+The reference (non-working in Python, kept as a structured stub) is `_mode_enhanced` in the prototype — it returns a clear error message documenting the limitation.
+
+### Console events
+
+```python
+unreal.SystemLibrary.execute_console_command(pie_world, 'ce MyCustomEvent', pc)
+```
+
+Only fires events that the gameplay code exposes via `UFUNCTION(Exec)` or custom event reflection. The third-person template's Enhanced Input flow doesn't expose these, so this path doesn't help with movement here.
 
 ### Console events
 
@@ -186,6 +244,18 @@ unreal.SystemLibrary.execute_console_command(pie_world, 'ce MyCustomEvent', pc)
 Only fires events that the gameplay code exposes via `UFUNCTION(Exec)` or custom event reflection. The third-person template's Enhanced Input flow doesn't expose these, so this path doesn't help with movement here.
 
 ---
+
+## Planned MCP shape
+
+The toolset surfaces three independent entry points (per user request: "all of the above"). Each maps to one mode above:
+
+| MCP tool | Mode | Sustain semantics | Args |
+|---|---|---|---|
+| `ue_simulate_input` | actions | per-tick driver walks list | `actions: [{type, direction?, duration?, yaw?, pitch?, scale?}]` |
+| `ue_input_primitive` | primitives | sustained for `duration`, one knob | `call: add_movement_input|add_yaw_input|add_pitch_input|jump, direction?, scale?, value?, duration?` |
+| `ue_inject_enhanced_input` | enhanced | persists until cleared (C++ subsystem call) | `asset_path, value_kind: axis2d|axis1d|bool, value, clear?: bool` |
+
+The reference prototype that exercises modes 1 and 2 lives at `D:/Projects/ultimate2/.ai/scratch/ue-prototypes/input_prototype.py`. Mode 3 is stubbed there and is implemented during the C++ port.
 
 ## Quick reference
 

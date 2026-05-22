@@ -17,7 +17,7 @@ One skill for all UE-flavored MCP interactions against the **JetBrains Rider MCP
 | **ide-ue:editor** | health, PIE play/pause/stop/frame_skip, mode + players + flags, log streaming, combined status pulse, persistent log-tail Monitor for warnings/errors (P9) | `ue_health`, `ue_play`, `ue_status`, `ue_get_logs`, `Monitor` |
 | **ide-ue:build** | UE-specific addenda (runner-dispatch confirmation via `ps`, Live Coding log verification, cook/package RunUAT template) on top of **`ide:build`** | — (delegates to `ide:build`) |
 | **ide-ue:assets** | find `.uasset`/`.umap`, derived BPs of a C++ class (full hierarchy incl. abstract bases), CDO defaults, per-field default overrides across descendants, GameplayTags | `search_assets`, `get_class_hierarchy`, `get_asset_properties`, `find_default_value_overrides`, `search_tags` |
-| **ide-ue:visuals** | capture a PNG of the editor window, the active level viewport, or an asset's preview thumbnail (cache-first; explicit live render) | `take_screenshot` |
+| **ide-ue:visuals** | capture a PNG of the editor window, the active level viewport, or an asset's preview thumbnail (cache-first; explicit live render); drive the level-editor viewport camera (read pose, set absolute, additive move, look-at, frame actor) | `take_screenshot`, `viewport_camera` |
 | **ide-ue:python** | run editor Python — single script or resumable batch via one tool | `ue_execute_python` |
 | **ide-ue:pipelines** | canonical MCP-first workflows | composes the above |
 | **ide-ue:long-ops** | UE-specific cook/package monitor-filter cheatsheet on top of **`ide:long-ops`** | — (delegates to `ide:long-ops`) |
@@ -348,6 +348,83 @@ The output directory is created on first use; files persist — the tool never c
 - **Materials & Textures almost always have an embedded thumbnail.** AnimBPs / ControlRigs / Niagara often don't — they're rendered the first time the asset is opened. If `asset_preview` returns `"no cached thumbnail"`, either open the asset in the editor once (it'll be saved next time the package is saved) or pass `forceLive=true`.
 - **Unrelated UE engine `ensure()` in `VirtualShadowMapCacheManager`.** When debugging with "Break on C++ Exception" enabled, a screenshot can trip a UE 5.x render-thread `ensure(IsInGameThread())` in `FVirtualShadowMapArrayCacheManager::TrimLoggingInfo` (calls `FApp::GetDeltaTime` from the render thread). This is a UE engine bug, **not the screenshot tool** — the ensure is non-fatal; resume the session and the screenshot still completes (and its PNG is already on disk by the time you see the pause).
 
+### Viewport camera
+
+`viewport_camera` is a single MCP tool that drives the **active level-editor viewport camera**. One tool, action-dispatched, mirroring the `ue_play(action=...)` style. Backed by `UUnrealEditorSubsystem::Get/SetLevelViewportCameraInfo` (read/write) + `UKismetMathLibrary::FindLookAtRotation` + `UEditorActorSubsystem::GetAllLevelActors` (focus). Requires editor connected.
+
+Reference recipe with API notes, pitfalls, and a worked example for every action: `recipes/viewport-camera.md`.
+
+#### Tool reference
+
+| Tool | Purpose | Notes |
+|------|---------|-------|
+| `viewport_camera { action, location?, rotation?, delta?, relative?, rotationDelta?, target?, actor?, minDistance? }` | Read or modify the active level-viewport camera pose | Requires `ue_health.connected = true`. All vectors are 3-element JSON arrays. |
+
+`action` values:
+
+| action | Effect | Args honoured |
+|---|---|---|
+| `get` | Read the current pose. | — |
+| `set` | Replace `location` and/or `rotation` (the one you don't pass stays put). | `location`, `rotation` (at least one required) |
+| `move` | Additive. `delta` shifts location (world-space, or camera-local when `relative=true` — then `[x,y,z]` means `[forward,right,up]`). `rotationDelta` is additive degrees on (pitch,yaw,roll). | `delta` and/or `rotationDelta`, `relative` |
+| `look_at` | Keep location; rotate to face `target` (world point). | `target` (required) |
+| `focus_on_actor` | Frame `actor` (Outliner label or FName) using its bounds; distance ≥ `minDistance` cm (`0` = engine default `3 * max(extent)`). | `actor` (required), `minDistance` |
+
+Argument formats — all coords/rotations are **3-element JSON arrays of doubles**:
+
+| Field | Shape | Example |
+|---|---|---|
+| `location` | `[x, y, z]` in UE units (cm) | `[500, 500, 800]` |
+| `rotation` / `rotationDelta` | `[pitch, yaw, roll]` in degrees | `[-20, 45, 0]` |
+| `delta` | `[x, y, z]`; with `relative=true` interpreted as `[forward, right, up]` | `[-300, 0, 0]` (3 m back along forward, relative) |
+| `target` | `[x, y, z]` world point | `[0, 0, 0]` |
+| `actor` | string (Outliner label, FName fallback) | `"SM_Cube8"` |
+| `minDistance` | double, cm; `0` = engine default | `200` |
+
+Returned shape (all actions):
+
+```jsonc
+{
+  "location": { "x": …, "y": …, "z": … },   // post-action pose
+  "rotation": { "pitch": …, "yaw": …, "roll": … },
+  "actorResolved": "SM_Cube8"                // focus_on_actor only; omitted otherwise
+}
+```
+
+#### Workflow
+
+1. **Pulse first.** `ue_status` (or `ue_health`). If `connected = false`, stop.
+2. **Read pose** if the workflow needs to track it: `viewport_camera --action get`.
+3. **Drive it** with whichever action fits — see "Recipes" below.
+4. **Verify on read-back** for setters: subsequent `get` returns the same `location`/`rotation` (within float rounding). `set`/`move`/`look_at`/`focus_on_actor` also return the post-action pose, so a second `get` is only needed for sanity checks.
+
+#### Recipes
+
+| What you want | Call |
+|---|---|
+| Read current pose | `viewport_camera --action get` |
+| Snap to a known pose | `viewport_camera --action set --location [500,500,800] --rotation [-20,45,0]` |
+| Only change rotation (keep location) | `viewport_camera --action set --rotation [0,90,0]` |
+| Fly 3 m forward (camera-local) | `viewport_camera --action move --delta [300,0,0] --relative true` |
+| Strafe 1 m right + drop 50 cm | `viewport_camera --action move --delta [0,100,-50] --relative true` |
+| Add 30° yaw | `viewport_camera --action move --rotationDelta [0,30,0]` |
+| Look at the world origin | `viewport_camera --action look_at --target [0,0,0]` |
+| Frame an actor by label | `viewport_camera --action focus_on_actor --actor "BP_Hero"` |
+| Frame an actor at min 5 m away | `viewport_camera --action focus_on_actor --actor "SM_Cube8" --minDistance 500` |
+
+A worked 10-iteration "spawn a cube, retreat 3 m" scenario lives in `recipes/viewport-camera.md` (paired with a runnable Python driver at `D:/Projects/ultimate2/.ai/scratch/ue-prototypes/scenario_spawn_and_retreat.py`).
+
+#### Critical rules
+
+- **JSON-array form is mandatory** for every vector / rotator field — `--location [500,500,800]`, NOT `--location 500,500,800` (the dispatcher parses each as a JSON value and rejects bare comma-lists).
+- **All values are doubles, UE units.** Location is in cm; UE's default scale is 1 unit = 1 cm. Rotations are degrees.
+- **`relative=true` reinterprets `delta` axes** as `(forward, right, up)` in the camera's local frame, computed from the current rotator on the C++ side. World-space `[forward,right,up]` is derived via `FRotator::Vector()` + `FRotationMatrix(...).GetScaledAxis(EAxis::Y/Z)`. `roll` rotates the up/right basis as you'd expect.
+- **`set` requires at least one of `location` / `rotation`.** Calling `set` with neither returns a clean error rather than touching the camera.
+- **`focus_on_actor` resolution order** — first matches the Outliner label (`AActor::GetActorLabel()`, editor-only), then falls back to FName (`AActor::GetName()`). The chosen label is echoed in `actorResolved` so the caller can confirm what actually got framed.
+- **Editor-only.** The MCP-side error path will tell you when the editor isn't connected; the C++ side additionally guards against missing subsystems and returns `success=false` with a diagnostic in the `error` field (which the MCP layer surfaces as `mcpFail`).
+- **No interpolation** — every action is an instant snap. For cinematic glides, drive a per-tick interpolation from inside `ue_execute_python` using `register_slate_post_tick_callback`; the recipe doc has the pattern.
+- **`UUnrealEditorSubsystem()` constructor form is deprecated** since UE 5.2 — use `unreal.get_editor_subsystem(unreal.UnrealEditorSubsystem)` from any peer Python you write that probes the same surface.
+
 ---
 
 ## ide-ue:python
@@ -533,6 +610,39 @@ If a category is *normally* useful but a single recurring message is noise, drop
 - **Stop with `TaskStop`** before you switch projects or the editor restarts on a different port — the tailer hard-codes `MCP_URL`. Re-arm against the new endpoint.
 
 **When to skip this:** purely-offline asset queries (`search_assets`, `get_class_hierarchy`, `find_default_value_overrides`, `get_asset_properties`) don't touch the editor; no log stream to watch. If `ue_health.connected = false` the buffer is empty anyway.
+
+### P10. Scripted viewport scenarios — camera + spawn loop
+
+When you want to programmatically populate the level *and* keep the camera in a useful frame between steps (e.g. "spawn N actors at progressively-receding distances", "frame each new actor and screenshot it"), compose `viewport_camera` with `ue_execute_python` for spawning.
+
+1. **Pulse and reset to a known pose.** `ue_status` (must be `connected`), then `viewport_camera --action set --location [...] --rotation [...]` to a baseline that makes the loop reproducible.
+2. **Per iteration, read → spawn → move.** Each iteration:
+   1. `viewport_camera --action get` — read current `location` + `rotation`.
+   2. Compute the world-space spawn point from `loc + forward(rot) * SPAWN_DISTANCE_CM` (UE's forward vector for a `(pitch, yaw, roll)` rotator is `(cos(p)*cos(y), cos(p)*sin(y), sin(p))`).
+   3. `ue_execute_python { script: "import unreal; eas=unreal.get_editor_subsystem(unreal.EditorActorSubsystem); a=eas.spawn_actor_from_object(unreal.EditorAssetLibrary.load_asset('/Engine/BasicShapes/Cube.Cube'), unreal.Vector(LX,LY,LZ), unreal.Rotator(pitch=0.0,yaw=0.0,roll=0.0)); a.set_actor_label(LABEL); print(a.get_actor_label())" }` — single-line `;`-joined to fit the `compile(..., 'single')` rule (or use the `exec(open(...))` workaround for multi-line spawn logic).
+   4. `viewport_camera --action move --delta [-RETREAT_CM,0,0] --relative true` — pull back along the camera's forward axis by `RETREAT_CM` cm (e.g. 300 = 3 m).
+3. **Cleanup between runs** — actors persist across runs unless you destroy them. Standard cleanup script (label-prefix sweep):
+   ```python
+   import unreal, json
+   eas = unreal.get_editor_subsystem(unreal.EditorActorSubsystem)
+   removed = []
+   for a in list(eas.get_all_level_actors()):
+       try:
+           lbl = a.get_actor_label()
+           if lbl.startswith("ScenarioCube_"):
+               removed.append(lbl); eas.destroy_actor(a)
+       except Exception: pass
+   print(json.dumps({"removed": len(removed)}))
+   ```
+4. **What to screenshot, when.** If you also want PNGs of each iteration, sandwich `take_screenshot --kind viewport` between step 2.iii (spawn) and 2.iv (retreat) — the camera is still pointing at the spawn point.
+
+#### Critical rules
+
+- **Labels must be unique enough to clean up.** Use a stable prefix (e.g. `ScenarioCube_`) so you can wipe just your scenario's actors without touching the rest of the map. A running counter in the label keeps the cleanup script idempotent.
+- **One spawn per `ue_execute_python` call.** Spawning N actors in a single multi-statement script triggers the `compile(..., 'single')` "multiple statements" SyntaxError unless you go through `exec(open(...))`. For ≤10 iterations the per-iteration overhead is negligible; for larger batches use the `exec(open(...))` pattern from `ide-ue:python`.
+- **Forward-vector math is yours, not the engine's, on the client side.** The MCP tool only does additive math when you pass `relative=true` *and* `delta`. If you want "spawn 1 m in front of where the camera is *now*", compute the forward vector client-side from the rotator we returned in step 2.i — don't try to encode it as a `move` follow-up (that moves the camera, not the spawn).
+- **The camera and player pawn are independent** — even during PIE, the level-editor viewport camera is a separate object from the gameplay camera. `viewport_camera` never touches PIE. To move the player view in PIE, drive the player controller via `ue_execute_python` (see `recipes/simulate-user-input.md`).
+- **The reference scenario lives in `D:/Projects/ultimate2/.ai/scratch/ue-prototypes/scenario_spawn_and_retreat.py`** — copy it as a starting template if you want a faster bootstrap than the per-step list above.
 
 ---
 
