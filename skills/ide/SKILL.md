@@ -13,7 +13,7 @@ One skill for all IDE MCP interactions. Pick your domain below, share the GATE a
 |--------|---------|-----------|
 | **ide:quality** | inspect, lint, problems, quick-fix, rename, reformat | `lint_files`, `get_file_problems`, `get_inspections`, `apply_quick_fix`, `rename_refactoring`, `reformat_file`, `run_inspection_kts`, `generate_psi_tree` |
 | **ide:build** | start a non-blocking solution build, poll state, surface problems incrementally; works for .NET, C++ (CMake), Unreal (UBT / Live Coding), Godot | `build_solution_start`, `build_solution_state`, `get_solution_projects`, `get_project_dependencies` |
-| **ide:runner** | run config, execute test/Main, capture output, launch override, **stop a running process** via terminal kill | `get_run_configurations`, `execute_run_configuration`, `execute_terminal_command` |
+| **ide:runner** | run config, execute test/Main, capture output, launch override, **stop a running process** via terminal kill | `get_run_configurations`, `execute_run_configuration`|
 | **ide:search** | find symbol/class/method, file by name/glob, text/regex in code | `search_symbol`, `search_file`, `search_text`, `search_regex` |
 | **ide:debugger** | debug, breakpoint, step, inspect variable, evaluate, mutate | `xdebug_start_debugger_session`, `xdebug_get_debugger_status`, `xdebug_control_session`, `xdebug_set_breakpoint`, `xdebug_list_breakpoints`, `xdebug_remove_breakpoint`, `xdebug_run_to_line`, `xdebug_get_threads`, `xdebug_get_stack`, `xdebug_get_frame_values`, `xdebug_get_value_by_path`, `xdebug_evaluate_expression`, `xdebug_set_variable` |
 | **ide:long-ops** | builds / cooks / packages / any IDE-spawned command running for minutes-to-hours | `Bash run_in_background`, `Monitor`, `ScheduleWakeup`, plus polling whichever MCP tool started the job |
@@ -146,7 +146,7 @@ For `.uproject` solutions the runner picks itself: editor connected + Live Codin
 
 **There is no native MCP "stop run configuration" tool.** Three workarounds, in preference order:
 
-1. **`execute_terminal_command kill <pid>`** — simplest, works for every process. Get the PID from the `execute_run_configuration` result, from `BashOutput`, or from `pgrep -f`. UE / .NET / Node handle SIGTERM cleanly; for stubborn processes escalate to `kill -9 <pid>`.
+1. **kill shell command `<pid>`** — simplest, works for every process. Get the PID from the `execute_run_configuration` result, from `BashOutput`, or from `pgrep -f`. UE / .NET / Node handle SIGTERM cleanly; for stubborn processes escalate to `kill -9 <pid>`.
 2. **`xdebug_control_session(action=STOP)`** — only if the run was started via `xdebug_start_debugger_session`. Doesn't apply to non-debug `execute_run_configuration` launches.
 3. **Rider UI** — the Stop button. Reserve for cases where MCP control is unavailable.
 
@@ -307,3 +307,4 @@ For builds started through `build_solution_start` you have two ways to backgroun
 
 - **Foreground-poll until known-long, then background.** Poll for 30-60 s; if state is still `Running` and you have no reason to expect immediate completion, drop into the protocol above. The poll itself can keep running as a background `Bash` script that calls the MCP tool and writes results to a log.
 - **Read the IDE's run log directly.** UBT / dotnet build invocations driven by the IDE write structured output to `out/dev-data/<ide-system>/tmp/ij_run__*.log` (path varies per IDE). Tail that file with Monitor while the build runs.
+/

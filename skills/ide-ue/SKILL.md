@@ -17,6 +17,7 @@ One skill for all UE-flavored MCP interactions against the **JetBrains Rider MCP
 | **ide-ue:editor** | health, PIE play/pause/stop/frame_skip, mode + players + flags, log streaming, combined status pulse, persistent log-tail Monitor for warnings/errors (P9) | `ue_health`, `ue_play`, `ue_status`, `ue_get_logs`, `Monitor` |
 | **ide-ue:build** | UE-specific addenda (runner-dispatch confirmation via `ps`, Live Coding log verification, cook/package RunUAT template) on top of **`ide:build`** | — (delegates to `ide:build`) |
 | **ide-ue:assets** | find `.uasset`/`.umap`, derived BPs of a C++ class (full hierarchy incl. abstract bases), CDO defaults, per-field default overrides across descendants, GameplayTags | `search_assets`, `get_class_hierarchy`, `get_asset_properties`, `find_default_value_overrides`, `search_tags` |
+| **ide-ue:visuals** | capture a PNG of the editor window, the active level viewport, or an asset's preview thumbnail (cache-first; explicit live render) | `take_screenshot` |
 | **ide-ue:python** | run editor Python — single script or resumable batch via one tool | `ue_execute_python` |
 | **ide-ue:pipelines** | canonical MCP-first workflows | composes the above |
 | **ide-ue:long-ops** | UE-specific cook/package monitor-filter cheatsheet on top of **`ide:long-ops`** | — (delegates to `ide:long-ops`) |
@@ -292,6 +293,45 @@ ue_status(count=5, minVerbosity="Warning")
 
 ---
 
+## ide-ue:visuals
+
+`take_screenshot` is the single MCP tool for grabbing a PNG of the running editor. It writes the file to `<Project>/Saved/Screenshots/<Platform>/RiderMCP/<YYYYMMDD-HHMMSS>_<kind>.png` and returns the absolute path plus dimensions and a diagnostic `sourceApi` label. The image bytes do **not** travel through MCP — the client reads the file from disk.
+
+### Tool reference
+
+| Tool | Purpose | Notes |
+|------|---------|-------|
+| `take_screenshot { kind, assetPath?, width?, height?, forceLive? }` | Capture one of three editor surfaces and return its on-disk path | Requires editor connected (`ue_health.connected = true`). |
+
+`kind` values:
+
+| Kind | What it captures | Underlying API (returned as `sourceApi`) |
+|------|------------------|------------------------------------------|
+| `editor_window` | Active top-level editor window: chrome + viewport + every docked panel | `FSlateApplication::GetActiveTopLevelRegularWindow` (with focus-aware fallback) → `FSlateApplication::TakeScreenshot(SWindow)` |
+| `viewport` | Active level-editor viewport only (no panels / chrome) | `ILevelEditor::GetActiveViewportInterface() → SLevelViewport` → `FSlateApplication::TakeScreenshot(SLevelViewport)` |
+| `asset_preview` | The same image the Content Browser shows for an asset — Blueprint, Material, AnimBP, Niagara, etc. | Cache-first: `ThumbnailTools::FindCachedThumbnail` (in-memory) → `ThumbnailTools::LoadThumbnailFromPackage` via `IAssetRegistry::GetAssetByObjectPath` (on-disk). Live fallback only when `forceLive=true`: `ThumbnailTools::RenderThumbnail(NeverFlush)`. |
+
+### Workflow
+
+1. **Pulse first.** `ue_status` (or `ue_health`). If `connected = false`, stop — the editor must be running.
+2. **Pick the kind.**
+   - "What does the editor look like right now?" → `editor_window`.
+   - "What's on screen in the level viewport?" → `viewport`.
+   - "What does asset X look like?" → `asset_preview { assetPath: "/Game/.../X" }`.
+3. **Resolve `assetPath` for `asset_preview`.** Long package path form (`/Game/Foo/BP_Hero`), not a disk path. Use `search_assets` to discover paths if you don't already know them — note `search_assets` returns disk paths; convert by stripping the project's `Content/` prefix and the `.uasset` suffix, then prepending `/Game/`.
+4. **Read the file the call returned** — the `path` field is absolute. PNG is BGRA8-sRGB.
+
+### Critical rules
+
+- **The MCP call blocks on the game thread.** Internally a screenshot needs render-thread coordination (`FlushRenderingCommands`). Slow but bounded; callers don't see the threading. Never call `ue_execute_python` *inside* a screenshot-driven workflow expecting them to interleave — both go through the game thread.
+- **`asset_preview` defaults to cache-only on purpose.** Returns a clean error (`"no cached thumbnail. Open the asset in the editor once, or set forceLive=true"`) in <1 s rather than risking a render-time hang. The hang risk is real: `ThumbnailTools::RenderThumbnail(AlwaysFlush)` on assets that pull long streaming chains (skeletal mesh / AnimBP) can wedge the render thread inside a graphics-driver call that is **not killable** from user mode (`taskkill /F`, `Stop-Process -Force`, even WMIC return Access Denied — only a reboot recovers). The tool only invokes `RenderThumbnail` when `forceLive=true`, and even then uses `NeverFlush` so streaming-readiness can't block the call.
+- **`editor_window` has a fallback when UE doesn't own focus.** `GetActiveTopLevelRegularWindow()` returns null if Rider (or any other app) is the foreground process when the MCP request lands. The tool then picks the first visible, non-minimised interactive top-level window — practically always the editor frame. No caller action needed.
+- **Save path is project-relative; response path is absolute.** Internally the engine receives a relative path so its own canonical resolution rules apply. The response always carries `FPaths::ConvertRelativePathToFull(...)` so MCP clients don't need to know where the project lives.
+- **Materials & Textures almost always have an embedded thumbnail.** AnimBPs / ControlRigs / Niagara often don't — they're rendered the first time the asset is opened. If `asset_preview` returns `"no cached thumbnail"`, either open the asset in the editor once (it'll be saved next time the package is saved) or pass `forceLive=true`.
+- **Unrelated UE engine `ensure()` in `VirtualShadowMapCacheManager`.** When debugging with "Break on C++ Exception" enabled, a screenshot can trip a UE 5.x render-thread `ensure(IsInGameThread())` in `FVirtualShadowMapArrayCacheManager::TrimLoggingInfo` (calls `FApp::GetDeltaTime` from the render thread). This is a UE engine bug, **not the screenshot tool** — the ensure is non-fatal; resume the session and the screenshot still completes (and its PNG is already on disk by the time you see the pause).
+
+---
+
 ## ide-ue:python
 
 The python execution surface is a **single tool**, `ue_execute_python`, that accepts either a single script or a list with resumable batch semantics.
@@ -508,3 +548,9 @@ For `build_solution_start`-driven Live Coding / UBT compiles, the IDE's own run 
   Pipelines P1, P3, P4, and P7 explicitly cross-call these tools. Reuse the GATE-resolved `<rider_mcp_name>` prefix and the `rootFolder` value across both skills.
 
 - **UE domain knowledge** (GAS, Animation, Networking pitfalls, C++ patterns, knowledge files) → **`ue-expert`** skill. This skill drives the MCP; that skill knows what to drive it toward.
+
+
+# TODO
+- **UE Python API index:** `ue-console/knowledge/_index.md`
+- **Turnkey SDK setup:** `ue-platform/knowledge/turnkey-and-sdks.md`
+- **Editor Python recipes & subsystems:** `ue-editor/knowledge/{recipes,docs_python_scripting,docs_subsystems,docs_scriptable_tools,docs_editor_utilities}.md`
