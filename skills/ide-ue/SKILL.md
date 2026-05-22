@@ -295,7 +295,25 @@ ue_status(count=5, minVerbosity="Warning")
 
 ## ide-ue:visuals
 
-`take_screenshot` is the single MCP tool for grabbing a PNG of the running editor. It writes the file to `<Project>/Saved/Screenshots/<Platform>/RiderMCP/<YYYYMMDD-HHMMSS>_<kind>.png` and returns the absolute path plus dimensions and a diagnostic `sourceApi` label. The image bytes do **not** travel through MCP — the client reads the file from disk.
+`take_screenshot` is the single MCP tool for grabbing a PNG of the running editor. It writes the file under the project's own screenshot dir and returns the absolute path plus dimensions and a diagnostic `sourceApi` label. The image bytes do **not** travel through MCP — the client reads the file from disk.
+
+### File paths
+
+Files land under UE's canonical screenshot dir, namespaced to keep tool output separable from `HighResShot` / Window→Take Screenshot files:
+
+```
+<Project>/Saved/Screenshots/<Platform>/RiderMCP/<YYYYMMDD-HHMMSS>_<kind>[_<asset-basename>].png
+```
+
+| `kind` | Filename suffix | Example |
+|--------|-----------------|---------|
+| `editor_window` | `_editor_window.png` | `20260522-154912_editor_window.png` |
+| `viewport`      | `_viewport.png`      | `20260522-154905_viewport.png` |
+| `asset_preview` | `_preview_<base>.png` | `20260522-154921_preview_M_Lava.png` (`base` is `FPaths::GetBaseFilename(assetPath)` — the leaf identifier of the long package path, no extension) |
+
+The output directory is created on first use; files persist — the tool never cleans them up. If you call it in a loop, plan for periodic cleanup of `<Project>/Saved/Screenshots/<Platform>/RiderMCP/`.
+
+`<Platform>` follows UE's `FPaths::ScreenShotDir()` convention — `WindowsEditor` on Windows, `MacEditor` on macOS, `LinuxEditor` on Linux. Don't hard-code "WindowsEditor" in client code; always use the `path` field the tool returns.
 
 ### Tool reference
 
