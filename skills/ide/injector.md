@@ -12,5 +12,4 @@ You are working inside an IDE-managed project. The `ide` skill is the single ent
 **Rules:**
 
 1. Invoke the `ide` Skill **before** reaching for CLI fallbacks, manual file inspection, or `print` debugging.
-2. Prefer `mcp__<ide_mcp_name>__*` tools over `Bash` whenever an MCP equivalent exists.
 3. Never guess IDE state — query it. Never trigger IDE actions through the GUI on the user's behalf when an MCP tool exists.

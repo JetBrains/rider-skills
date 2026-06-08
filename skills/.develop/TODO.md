@@ -28,3 +28,6 @@ Take screen shot from current Editor window, externa PIE window, preview in Blup
 
 ## TASK
 Add cleanup_code endpoint in MCP
+
+## TASK 
+Add CRUD for asset o scene action in MCP 

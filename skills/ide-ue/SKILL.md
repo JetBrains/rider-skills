@@ -18,6 +18,8 @@ One skill for all UE-flavored MCP interactions against the **JetBrains Rider MCP
 | **ide-ue:build** | UE-specific addenda (runner-dispatch confirmation via `ps`, Live Coding log verification, cook/package RunUAT template) on top of **`ide:build`** | — (delegates to `ide:build`) |
 | **ide-ue:assets** | find `.uasset`/`.umap`, derived BPs of a C++ class (full hierarchy incl. abstract bases), CDO defaults, per-field default overrides across descendants, GameplayTags | `search_assets`, `get_class_hierarchy`, `get_asset_properties`, `find_default_value_overrides`, `search_tags` |
 | **ide-ue:visuals** | capture a PNG of the editor window, the active level viewport, or an asset's preview thumbnail (cache-first; explicit live render); drive the level-editor viewport camera (read pose, set absolute, additive move, look-at, frame actor) | `take_screenshot`, `viewport_camera` |
+| **ide-ue:scene** | place / create an object on the level-editor scene from an asset (StaticMesh or Blueprint) — world location, rotation, scale, optional Outliner label | `spawn_actor` |
+| **ide-ue:input** | drive the player pawn during PIE — action sequences (move/jump/look/wait), single sustained primitives, or Enhanced Input injection through the project's `UInputAction` assets | `simulate_input` |
 | **ide-ue:python** | run editor Python — single script or resumable batch via one tool | `ue_execute_python` |
 | **ide-ue:pipelines** | canonical MCP-first workflows | composes the above |
 | **ide-ue:long-ops** | UE-specific cook/package monitor-filter cheatsheet on top of **`ide:long-ops`** | — (delegates to `ide:long-ops`) |
@@ -427,6 +429,174 @@ A worked 10-iteration "spawn a cube, retreat 3 m" scenario lives in `recipes/vie
 
 ---
 
+## ide-ue:scene
+
+`spawn_actor` places / creates an object on the **active level-editor scene** from an asset. One tool, asset-driven. Backed by `RiderAgentTools/Private/SceneActorSpawner.cpp` — `LoadObject` to resolve the asset, then `UEditorActorSubsystem::SpawnActorFromObject` (StaticMesh / template object) or `SpawnActorFromClass` (Blueprint / generated `_C` class), then `SetActorScale3D` + `SetActorLabel`. Runs on the game thread; **editor-only** (design-time level, not PIE).
+
+Reference recipe with the asset-kind dispatch table, API notes, pitfalls, and worked examples: `recipes/spawn-actor.md`.
+
+### Tool reference
+
+| Tool | Purpose | Notes |
+|------|---------|-------|
+| `spawn_actor { assetPath, location, rotation?, scale?, label? }` | Spawn one actor from an asset into the current level | Requires `ue_health.connected = true`. Vectors are 3-element JSON arrays. |
+
+Argument formats — coords/rotations are **3-element JSON arrays of doubles**:
+
+| Field | Shape | Default | Example |
+|---|---|---|---|
+| `assetPath` | engine long object path (`PackageName.ObjectName`) | — (required) | `/Engine/BasicShapes/Cube.Cube`, `/Game/Heroes/BP_Hero.BP_Hero` |
+| `location` | `[x, y, z]` world units (cm) | — (required) | `[0, 0, 100]` |
+| `rotation` | `[pitch, yaw, roll]` degrees | `[0, 0, 0]` | `[0, 45, 0]` |
+| `scale` | `[x, y, z]` per-axis | `[1, 1, 1]` | `[2, 2, 2]` |
+| `label` | string (Outliner label) | engine-assigned | `"HeroSpawn"` |
+
+Returned shape:
+
+```jsonc
+{
+  "spawned": true,
+  "actorLabel": "HeroSpawn",        // resolved Outliner label (post-SetActorLabel); omitted on failure
+  "actorName": "StaticMeshActor_3", // internal FName (GetName); omitted on failure
+  "location": { "x": …, "y": …, "z": … }   // final world location of the spawned actor
+}
+```
+
+### Workflow
+
+1. **Pulse first.** `ue_status` (or `ue_health`). If `connected = false`, stop — the editor must be running.
+2. **Resolve the asset path.** A long *object* path (`/Game/Foo/BP_Hero.BP_Hero`), not a disk path and not a bare package path. Use `search_assets` to discover candidates; convert its disk path by stripping the project's `Content/` prefix + `.uasset` suffix, prepending `/Game/`, and appending `.<basename>`.
+3. **Spawn.** `spawn_actor { assetPath, location, rotation?, scale?, label? }`. Returns the resolved label + FName + final location.
+4. **Verify / iterate.** Frame it with `viewport_camera --action focus_on_actor --actor "<actorLabel>"`, screenshot with `take_screenshot --kind viewport`, or read it back via `ue_execute_python`.
+
+### Recipes
+
+| What you want | Call |
+|---|---|
+| Drop an engine cube at the origin, 1 m up | `spawn_actor --assetPath "/Engine/BasicShapes/Cube.Cube" --location [0,0,100]` |
+| Spawn a Blueprint with a label | `spawn_actor --assetPath "/Game/Heroes/BP_Hero.BP_Hero" --location [500,0,0] --label "Hero1"` |
+| Spawn rotated + double scale | `spawn_actor --assetPath "/Engine/BasicShapes/Cone.Cone" --location [0,0,200] --rotation [0,90,0] --scale [2,2,2]` |
+| Spawn, then frame it | `spawn_actor --assetPath "/Engine/BasicShapes/Sphere.Sphere" --location [0,0,150] --label "Probe"` → `viewport_camera --action focus_on_actor --actor "Probe"` |
+
+### Critical rules
+
+- **JSON-array form is mandatory** for every vector — `--location [0,0,100]`, NOT `--location 0,0,100` (each is parsed as a JSON value; bare comma-lists are rejected).
+- **`assetPath` is a long *object* path**, `PackageName.ObjectName` (`/Game/Foo/BP_Hero.BP_Hero`). The bare package path (`/Game/Foo/BP_Hero`) often resolves too, but the dotted object form is unambiguous. Disk `.uasset` paths are **not** accepted (unlike `get_asset_properties`).
+- **Asset kind decides the spawn path** (handled C++-side): a `UClass` / generated `_C` class or a `UBlueprint` → `SpawnActorFromClass`; anything else (StaticMesh, template object) → `SpawnActorFromObject`. A non-placeable asset (e.g. a Material) returns `spawned=false` with a diagnostic in the error.
+- **`scale` defaults to `[1,1,1]`.** A zero scale is ignored C++-side (won't collapse the actor); pass real non-zero values to scale.
+- **Editor-only.** Spawns into the design-time level, not the PIE world. The C++ side guards missing subsystems and returns `success=false` with a diagnostic the MCP layer surfaces as `mcpFail`. To spawn at runtime in PIE, drive gameplay code via `ue_execute_python`.
+- **Labels are not unique by default.** For loops/cleanup, pass a stable prefixed `label` (e.g. `ScenarioCube_03`) so you can sweep just your actors later (see P10 cleanup).
+- **Runs on the game thread**, like every other live tool — don't expect a long spawn loop to interleave with other game-thread MCP work in the same editor.
+
+---
+
+## ide-ue:input
+
+`simulate_input` is a single action-dispatched MCP tool that drives the **player pawn / controller in the active PIE world** from outside the editor. Three modes share one entry point: action sequences, a single sustained primitive, and Enhanced Input injection through the project's own `UInputAction` assets. Implementation is fully native C++ (see `RiderAgentTools/Private/InputSimulator.cpp`) — no Python tick-callback gymnastics, no per-script `compile(..., 'single')` workarounds.
+
+### Tool reference
+
+| Tool | Purpose | Notes |
+|------|---------|-------|
+| `simulate_input { mode, ... }` | Drive PIE player input via one of three modes | Requires PIE running (`ue_status.playState == "Play"`); fails cleanly with `"Not in PIE — start a Play session first."` otherwise. Each call **cancels the previous in-flight ticker** before arming its own — at most one input driver runs at a time. |
+
+`mode` values:
+
+| Mode | Effect | Ticker shape | Required params |
+|---|---|---|---|
+| `actions` | Walks a list of `{type, ...}` records via `FTSTicker`, one record at a time. Each record's `duration` is wall-clock, not frame-count. | Per-frame ticker until the list is exhausted or the pawn dies. | `actions: [...]` (non-empty) |
+| `primitive` | Holds one knob for `primitiveDuration` seconds. The matching pawn/PC call is invoked every tick until the deadline. | Per-frame ticker until the deadline, OR one-shot (jump / zero-duration). | `primitiveCall` |
+| `enhanced` | Routes through `UEnhancedInputLocalPlayerSubsystem::StartContinuousInputInjectionForAction` so the project's IA modifiers / triggers run normally. Clear with `enhancedClear=true`. | UE-internal — no ticker on our side. | `enhancedAssetPath` |
+
+### `mode=actions` — record shape
+
+`actions: [ { type, ... }, ... ]`. Records are stepped sequentially, one tick at a time, until the list is exhausted.
+
+| `type` | Per-tick effect | Fields honoured | Advance condition |
+|---|---|---|---|
+| `move` | `Pawn->AddMovementInput(DirectionVector(pawn, direction), scale)` | `direction` (forward / back / left / right; default forward), `scale` (default 1.0), `duration` (seconds) | `Elapsed >= duration` |
+| `jump` | Once per record: `Cast<ACharacter>(Pawn)->Jump()`. Pawn must be a `Character`. | `duration` | `duration <= 0` OR `Elapsed >= duration` (lets the jump arc complete before next record) |
+| `look` | `PC->AddYawInput(yaw * frac)` + `PC->AddPitchInput(pitch * frac)`, `frac = min(Δt/duration, 1)`. Zero-duration applies the full delta in one tick. | `yaw`, `pitch`, `duration` | `Elapsed >= duration`, or one-shot when `duration <= 0` |
+| `wait` | No-op | `duration` | `Elapsed >= duration` |
+
+Unknown `type` values are silently skipped (advance with no work) — the dispatcher does **not** fail the call, which keeps unknown action records non-fatal during exploratory authoring.
+
+### `mode=primitive` — `primitiveCall` shape
+
+| `primitiveCall` | Per-tick effect | Other params honoured | Sustain semantics |
+|---|---|---|---|
+| `add_movement_input` | `Pawn->AddMovementInput(dir, primitiveScale)`; `dir` is `DirectionVector(pawn, primitiveDirection)` (forward/back/left/right) **or** the literal `primitiveWorldVec` if `primitiveDirection == "world_vec"` | `primitiveDirection`, `primitiveScale`, `primitiveWorldVec` | Sustains for `primitiveDuration` |
+| `add_yaw_input` | `PC->AddYawInput(primitiveValue)` | `primitiveValue` | Sustains for `primitiveDuration` |
+| `add_pitch_input` | `PC->AddPitchInput(primitiveValue)` | `primitiveValue` | Sustains for `primitiveDuration` |
+| `jump` | Once: `Cast<ACharacter>(Pawn)->Jump()` | — | **One-shot** — no ticker; returns `armed=false` |
+
+`primitiveDuration <= 0` → one-shot for every call (no ticker armed). `primitiveDirection == "world_vec"` lets you drive movement along an arbitrary world vector instead of one of the four pawn-relative directions.
+
+### `mode=enhanced` — Enhanced Input injection
+
+Inject continuous input through the project's own `UInputAction` asset, so modifiers (deadzone, sensitivity) and triggers (held / tapped) all run normally:
+
+| Param | Meaning |
+|---|---|
+| `enhancedAssetPath` | Long package path to the `UInputAction` (`/Game/Input/Actions/IA_Move`). Tries the bare path first; falls back to `<path>.<basename>` (the BP-asset inner-object suffix). |
+| `enhancedValueKind` | `axis2d` (default) → `FVector2D(enhancedAxis2dX, enhancedAxis2dY)`; `axis1d` → scalar `enhancedAxis1d`; `bool` → `enhancedBool`. |
+| `enhancedClear` | `true` → calls `StopContinuousInputInjectionForAction(IA)` and returns `armed=false`. Use to release a previously-injected hold. |
+
+The C++ path resolves `PC->GetLocalPlayer()->GetSubsystem<UEnhancedInputLocalPlayerSubsystem>()` directly — the editor Python binding doesn't expose this (`LocalPlayer.player` is protected, `GetLocalPlayer()` isn't a `UFUNCTION`), so the MCP tool is the only first-class path from outside the engine.
+
+### Response shape (all modes)
+
+```jsonc
+{
+  "success": true,
+  "armed": true,                // false for one-shot (jump, enhancedClear, zero-duration primitive) and on error
+  "startLocation": { "x": …, "y": …, "z": … },   // pawn location at the moment the call landed
+  "startVelocity": { "x": …, "y": …, "z": … },   // pawn velocity at the moment the call landed
+  "nActions": 5,                // actions mode only; 0 elsewhere
+  "error": ""                   // populated only when success=false
+}
+```
+
+The pose snapshot is taken **before** the ticker arms — pair it with a `ue_execute_python` velocity/location read a few seconds later to verify the drive actually moved the pawn.
+
+### Workflow
+
+1. **Pulse + confirm PIE.** `ue_status` — require `connected = true` and `playState == "Play"`. If PIE isn't running, start it first via `ue_play(action="play", mode="floating", players=1)` and wait 5-10 s.
+2. **Pick the mode.**
+   - "Run a scripted scenario" (move forward, jump, look left, wait) → `actions`.
+   - "Hold W for 1.5 s" → `primitive { primitiveCall: "add_movement_input", primitiveDuration: 1.5 }`.
+   - "Drive the project's own IA_Move with a (0,1) axis2d for as long as I leave it armed" → `enhanced`.
+3. **Fire.** `simulate_input { mode: "...", ... }`. The call returns immediately with the pre-fire snapshot.
+4. **Verify.** Wait `sum(action.duration)` (actions) or `primitiveDuration` (primitive); re-read pawn location/velocity via `ue_execute_python`; compare against `startLocation` / `startVelocity` in the response.
+5. **Release `enhanced` holds.** Always pair an `enhanced` injection with `simulate_input { mode: "enhanced", enhancedAssetPath: "...", enhancedClear: true }` — UE keeps the injected value alive until the subsystem is told to stop, so a forgotten hold survives across PIE stops within the same editor session.
+
+### Critical rules
+
+- **Only one ticker is active at a time.** Every call starts with `CancelActiveTicker()`. A second `simulate_input` while the previous run is still ticking **replaces** the previous run — the old action list / primitive is dropped immediately. Build longer sequences as a single `actions` list, not as multiple back-to-back calls.
+- **`actions` requires at least one entry.** Empty `actions=[]` fails cleanly with `"actions mode requires at least one entry."` — historically the only safe empty-array shape on the wire (see "Known issue" below).
+- **Pawn must be an `ACharacter` for `jump`.** Non-Character pawns silently skip the jump (the `Cast<ACharacter>` returns null and the record advances). Verify with `pawn.is_player_controlled()` + checking the pawn class via Python before relying on jump records.
+- **`look.duration <= 0` applies the full yaw/pitch in a single tick.** Useful for instant snaps; not what you want for smooth turns — pass a real duration for those.
+- **Enhanced-Input `clear` is per-action.** Stopping injection for IA_Move does not stop IA_Jump — clear every action you injected.
+- **Pre-fire snapshot, not post-fire.** `startLocation` / `startVelocity` in the response are the values **before** the ticker arms. Don't compare them to "expected end state".
+- **All modes run on the game thread.** Long `actions` lists hold the ticker callback inside `FTSTicker`; the editor UI stays responsive but the work itself is serialised against the rest of the game-thread workload. Don't queue a 60 s scripted scenario expecting to do other MCP work in parallel inside the same PIE world.
+- **Known issue — TArray marshaller prerequisite for `mode=actions` / `mode=enhanced`.** Older bundled-RiderLink builds defined `resize(TArray<T,A>&, int32_t)` as `value.Reserve(size)` in `UE4TypesMarshallers.h`. `Reserve` only grows capacity, so the next-line indexed assignment in `Buffer::read_array` trips `TArray::RangeCheck` and the editor hard-faults (STATUS_BREAKPOINT 0x80000003). Any Rider→UE message carrying a non-empty TArray (here: the `actions` list, and `ue_execute_python { scripts: [...] }`) hits it. Fix: change the body to `value.SetNum(size);` and full-rebuild the editor (header-only template — touches many TUs, so Live Coding can't apply it). Until the fix ships in the user's Rider release, prefer `mode=primitive` (single sustained call) for movement; `mode=actions` will crash UE on the receiving side.
+
+### Recipes
+
+| What you want | Call |
+|---|---|
+| Walk forward 1 s, then jump, then walk forward 0.5 s, look 45° right, wait 0.5 s | `simulate_input { mode: "actions", actions: [{type:"move",direction:"forward",duration:1.0},{type:"jump",duration:0.3},{type:"move",direction:"forward",duration:0.5},{type:"look",yaw:45,duration:0.5},{type:"wait",duration:0.5}] }` |
+| Hold W for 1.5 s | `simulate_input { mode: "primitive", primitiveCall: "add_movement_input", primitiveDirection: "forward", primitiveScale: 1.0, primitiveDuration: 1.5 }` |
+| Continuous yaw at +30°/s for 2 s | `simulate_input { mode: "primitive", primitiveCall: "add_yaw_input", primitiveValue: 30, primitiveDuration: 2.0 }` |
+| One-shot jump | `simulate_input { mode: "primitive", primitiveCall: "jump" }` |
+| Drive `/Game/Input/Actions/IA_Move` with (0,1) axis2d until released | `simulate_input { mode: "enhanced", enhancedAssetPath: "/Game/Input/Actions/IA_Move", enhancedValueKind: "axis2d", enhancedAxis2dX: 0, enhancedAxis2dY: 1 }` |
+| Release that hold | `simulate_input { mode: "enhanced", enhancedAssetPath: "/Game/Input/Actions/IA_Move", enhancedClear: true }` |
+| Move along an arbitrary world vector for 1 s | `simulate_input { mode: "primitive", primitiveCall: "add_movement_input", primitiveDirection: "world_vec", primitiveWorldVec: { x: 1, y: 0, z: 0 }, primitiveScale: 1.0, primitiveDuration: 1.0 }` |
+
+The full design rationale and the per-mode validation walkthrough (per-tick driver, callback-lifetime pitfalls, mode-3 C++ access via `GetLocalPlayer`, Enhanced-Input value-kind mapping) lives in `recipes/simulate-user-input.md`.
+
+---
+
 ## ide-ue:python
 
 The python execution surface is a **single tool**, `ue_execute_python`, that accepts either a single script or a list with resumable batch semantics.
@@ -613,13 +783,13 @@ If a category is *normally* useful but a single recurring message is noise, drop
 
 ### P10. Scripted viewport scenarios — camera + spawn loop
 
-When you want to programmatically populate the level *and* keep the camera in a useful frame between steps (e.g. "spawn N actors at progressively-receding distances", "frame each new actor and screenshot it"), compose `viewport_camera` with `ue_execute_python` for spawning.
+When you want to programmatically populate the level *and* keep the camera in a useful frame between steps (e.g. "spawn N actors at progressively-receding distances", "frame each new actor and screenshot it"), compose `viewport_camera` with `spawn_actor` (see `ide-ue:scene`).
 
 1. **Pulse and reset to a known pose.** `ue_status` (must be `connected`), then `viewport_camera --action set --location [...] --rotation [...]` to a baseline that makes the loop reproducible.
 2. **Per iteration, read → spawn → move.** Each iteration:
    1. `viewport_camera --action get` — read current `location` + `rotation`.
    2. Compute the world-space spawn point from `loc + forward(rot) * SPAWN_DISTANCE_CM` (UE's forward vector for a `(pitch, yaw, roll)` rotator is `(cos(p)*cos(y), cos(p)*sin(y), sin(p))`).
-   3. `ue_execute_python { script: "import unreal; eas=unreal.get_editor_subsystem(unreal.EditorActorSubsystem); a=eas.spawn_actor_from_object(unreal.EditorAssetLibrary.load_asset('/Engine/BasicShapes/Cube.Cube'), unreal.Vector(LX,LY,LZ), unreal.Rotator(pitch=0.0,yaw=0.0,roll=0.0)); a.set_actor_label(LABEL); print(a.get_actor_label())" }` — single-line `;`-joined to fit the `compile(..., 'single')` rule (or use the `exec(open(...))` workaround for multi-line spawn logic).
+   3. `spawn_actor --assetPath "/Engine/BasicShapes/Cube.Cube" --location [LX,LY,LZ] --label LABEL` — the dedicated scene tool (`ide-ue:scene`). Returns the resolved label + FName + final location. (Before `spawn_actor` shipped this went through `ue_execute_python` + `spawn_actor_from_object`; prefer the tool now.)
    4. `viewport_camera --action move --delta [-RETREAT_CM,0,0] --relative true` — pull back along the camera's forward axis by `RETREAT_CM` cm (e.g. 300 = 3 m).
 3. **Cleanup between runs** — actors persist across runs unless you destroy them. Standard cleanup script (label-prefix sweep):
    ```python
@@ -639,7 +809,7 @@ When you want to programmatically populate the level *and* keep the camera in a 
 #### Critical rules
 
 - **Labels must be unique enough to clean up.** Use a stable prefix (e.g. `ScenarioCube_`) so you can wipe just your scenario's actors without touching the rest of the map. A running counter in the label keeps the cleanup script idempotent.
-- **One spawn per `ue_execute_python` call.** Spawning N actors in a single multi-statement script triggers the `compile(..., 'single')` "multiple statements" SyntaxError unless you go through `exec(open(...))`. For ≤10 iterations the per-iteration overhead is negligible; for larger batches use the `exec(open(...))` pattern from `ide-ue:python`.
+- **Prefer `spawn_actor` over Python for placement.** The dedicated tool spawns one actor per call with no `compile(..., 'single')` constraint and returns the resolved label / FName / final location. Reserve `ue_execute_python` spawning for bulk or procedural placement needing logic the tool doesn't expose (per-actor component edits, computed transforms) — then use the `exec(open(...))` pattern from `ide-ue:python`.
 - **Forward-vector math is yours, not the engine's, on the client side.** The MCP tool only does additive math when you pass `relative=true` *and* `delta`. If you want "spawn 1 m in front of where the camera is *now*", compute the forward vector client-side from the rotator we returned in step 2.i — don't try to encode it as a `move` follow-up (that moves the camera, not the spawn).
 - **The camera and player pawn are independent** — even during PIE, the level-editor viewport camera is a separate object from the gameplay camera. `viewport_camera` never touches PIE. To move the player view in PIE, drive the player controller via `ue_execute_python` (see `recipes/simulate-user-input.md`).
 - **The reference scenario lives in `D:/Projects/ultimate2/.ai/scratch/ue-prototypes/scenario_spawn_and_retreat.py`** — copy it as a starting template if you want a faster bootstrap than the per-step list above.

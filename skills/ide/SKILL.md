@@ -1,6 +1,6 @@
 ---
 name: ide
-description: "Generic IDE MCP driver. Single entry point for all IDE interactions. MANDATORY for: code quality — inspect, lint, find problems, apply quick-fix, rename, reformat (ide:quality); building — non-blocking build_solution_start + state polling for .NET/CMake/UE/Godot solutions (ide:build); running configurations — execute tests, capture output, override launch args, stop processes (ide:runner); codebase search — find symbols, files, text, regex (ide:search); debugging — start sessions, breakpoints, step, inspect variables, evaluate expressions (ide:debugger); long-running operations — background protocol for builds/cooks/packages with Monitor + ScheduleWakeup (ide:long-ops). Use `mcp__<ide_mcp_name>__*` tools instead of CLI fallbacks, print statements, manual IDE actions, or guessing."
+description: "Generic IDE MCP driver. Single entry point for all IDE interactions. MANDATORY for: code quality — lint, find problems, rename, reformat (ide:quality); building — non-blocking build_solution_start + state polling for .NET/CMake/UE/Godot solutions (ide:build); running configurations — execute tests, capture output, override launch args, stop processes (ide:runner); codebase search — find symbols, files, text, regex (ide:search); file operations — read, patch, create, navigate (ide:files); debugging — start sessions, breakpoints, step, inspect variables, evaluate expressions (ide:debugger); git — repo status, VCS roots (ide:git); long-running operations — background protocol for builds/cooks/packages with Monitor + ScheduleWakeup (ide:long-ops). Use `mcp__<ide_mcp_name>__*` tools instead of CLI fallbacks, print statements, manual IDE actions, or guessing."
 ---
 
 # Generic IDE Skill
@@ -11,21 +11,23 @@ One skill for all IDE MCP interactions. Pick your domain below, share the GATE a
 
 | Domain | Trigger | Key tools |
 |--------|---------|-----------|
-| **ide:quality** | inspect, lint, problems, quick-fix, rename, reformat | `lint_files`, `get_file_problems`, `get_inspections`, `apply_quick_fix`, `rename_refactoring`, `reformat_file`, `run_inspection_kts`, `generate_psi_tree` |
+| **ide:quality** | inspect, lint, problems, rename, reformat | `lint_files`, `get_file_problems`, `get_project_problems`, `rename_refactoring`, `reformat_file`, `move_type_to_namespace`, `run_inspection_kts`, `generate_psi_tree` |
 | **ide:build** | start a non-blocking solution build, poll state, surface problems incrementally; works for .NET, C++ (CMake), Unreal (UBT / Live Coding), Godot | `build_solution_start`, `build_solution_state`, `get_solution_projects`, `get_project_dependencies` |
-| **ide:runner** | run config, execute test/Main, capture output, launch override, **stop a running process** via terminal kill | `get_run_configurations`, `execute_run_configuration`|
-| **ide:search** | find symbol/class/method, file by name/glob, text/regex in code | `search_symbol`, `search_file`, `search_text`, `search_regex` |
-| **ide:debugger** | debug, breakpoint, step, inspect variable, evaluate, mutate | `xdebug_start_debugger_session`, `xdebug_get_debugger_status`, `xdebug_control_session`, `xdebug_set_breakpoint`, `xdebug_list_breakpoints`, `xdebug_remove_breakpoint`, `xdebug_run_to_line`, `xdebug_get_threads`, `xdebug_get_stack`, `xdebug_get_frame_values`, `xdebug_get_value_by_path`, `xdebug_evaluate_expression`, `xdebug_set_variable` |
+| **ide:runner** | run config, execute test/Main, capture output, launch override, find tests, **stop a running process** via terminal kill | `get_run_configurations`, `execute_run_configuration`, `findTests` |
+| **ide:search** | find symbol/class/method, file by name/glob, text/regex in code, call hierarchy, symbol info | `search_symbol`, `search_file`, `search_text`, `search_regex`, `skill_search`, `get_symbol_info`, `analyze_calls` |
+| **ide:files** | read file content, apply patch, create file, open in editor, list directory, get open files | `read_file`, `apply_patch`, `create_new_file`, `open_file_in_editor`, `list_directory_tree`, `get_all_open_file_paths` |
+| **ide:debugger** | debug, breakpoint, step, inspect variable, evaluate, mutate, attach to process, memory dump | `xdebug_start_debugger_session`, `xdebug_get_debugger_status`, `xdebug_control_session`, `xdebug_set_breakpoint`, `xdebug_list_breakpoints`, `xdebug_remove_breakpoint`, `xdebug_run_to_line`, `xdebug_get_threads`, `xdebug_get_stack`, `xdebug_get_frame_values`, `xdebug_get_value_by_path`, `xdebug_evaluate_expression`, `xdebug_set_variable`, `xdebug_attach_to_process`, `xdebug_memory_dump`, `xdebug_start_mixed_mode_debug`, `attach_to_process`, `ignore_exception` |
+| **ide:git** | VCS status, repository list | `get_repositories`, `git_status` |
 | **ide:long-ops** | builds / cooks / packages / any IDE-spawned command running for minutes-to-hours | `Bash run_in_background`, `Monitor`, `ScheduleWakeup`, plus polling whichever MCP tool started the job |
 
 ---
 
 ## GATE — Resolve the IDE MCP server name first
 
-Before calling **any** tool, resolve `<ide_mcp_name>` — the actual MCP server prefix. The string `mcp__<ide_mcp_name>__` is a placeholder; the real prefix varies per install (`ide`, `jetbrains`, `intellij`, `ide-mcp`, `jetbrains-ide`, etc.).
+Before calling **any** tool, resolve `<ide_mcp_name>` — the actual MCP server prefix. The string `mcp__<ide_mcp_name>__` is a placeholder; the real prefix varies per install (`rider`, `jetbrains`, `intellij`, `ide-mcp`, `jetbrains-ide`, etc.).
 
 **Detection (in order):**
-1. Scan the deferred tool list in `<system-reminder>` for any clearly IDE-flavored tool (e.g. `lint_files`, `get_file_problems`, `xdebug_*`, `execute_run_configuration`, `search_symbol`, `reformat_file`). Take the prefix between `mcp__` and the second `__`. Example: `mcp__jetbrains__lint_files` → `<ide_mcp_name>` = `jetbrains`.
+1. Scan the deferred tool list in `<system-reminder>` for any clearly IDE-flavored tool (e.g. `lint_files`, `get_file_problems`, `xdebug_*`, `execute_run_configuration`, `search_symbol`, `reformat_file`). Take the prefix between `mcp__` and the second `__`. Example: `mcp__rider__lint_files` → `<ide_mcp_name>` = `rider`.
 2. Prefer the prefix that owns the broadest family of matching tools.
 3. **If nothing found** — STOP and tell the user: *"I can't find the IDE MCP server. Please make sure the IDE is running with the MCP server enabled and the client is connected, then ask me again."*
 4. **Cache the resolved name for the rest of the session.** Never re-resolve on every step.
@@ -35,6 +37,8 @@ Before calling **any** tool, resolve `<ide_mcp_name>` — the actual MCP server 
 - **Always pass `rootFolder`** on every call — solution root (or current working directory). Ask once if unknown; reuse for every subsequent call.
 - These tools are the **only** way to interact with the IDE — do not fall back to CLI runners, shell grep, print statements, or "please right-click in the IDE."
 - If a tool is missing, tell the user which MCP module is needed rather than simulating the action manually.
+- **`get_inspections` and `apply_quick_fix` do not exist in this Rider MCP version.** For problems use `get_file_problems`/`lint_files`/`get_project_problems`. For fixes, edit the file directly using the Edit tool.
+- **`get_file_text_by_path` does not exist.** Use `read_file` to read file contents.
 
 ---
 
@@ -46,19 +50,20 @@ Before calling **any** tool, resolve `<ide_mcp_name>` — the actual MCP server 
 |------|------|
 | Problems in one or more files | `lint_files` |
 | Problems in one file with severity filter | `get_file_problems` |
-| Problems + quick-fix list for a file | `get_inspections(filePath=...)` |
-| List available inspections | `get_inspections()` (no filePath) |
-| Apply a quick-fix or intention action | `apply_quick_fix` |
+| Project-wide problems (all files) | `get_project_problems` |
 | Rename a symbol across the solution | `rename_refactoring` |
 | Reformat a file or region | `reformat_file` |
+| Move a type to another namespace | `move_type_to_namespace` |
 | Custom `.inspection.kts` script | `run_inspection_kts` |
 | Dump PSI tree for debugging custom inspection | `generate_psi_tree` |
+| Inspection KTS API reference | `generate_inspection_kts_api` |
+| Inspection KTS examples | `generate_inspection_kts_examples` |
 
 ### Workflow
 
-1. **Get problems.** `lint_files` (multiple files) or `get_file_problems` (single). For fix list alongside problems use `get_inspections(filePath=...)`.
+1. **Get problems.** `lint_files` (multiple files), `get_file_problems` (single file), or `get_project_problems` (solution-wide).
 2. **Triage.** Report by severity: ERROR → WARNING → lower. Format: `(filePath:line:col): message`.
-3. **Apply fixes.** Note `line`, `column`, `fixName` from `get_inspections`. Call `apply_quick_fix`. Fix one problem at a time — coordinates shift after each write.
+3. **Apply fixes.** No `apply_quick_fix` exists — fix problems by editing the file directly with the Edit tool at the indicated line/column.
 4. **Verify.** Re-run `get_file_problems`/`lint_files` to confirm problem count dropped.
 
 **Renaming:** locate the declaration with `search_symbol` (ide:search), then call `rename_refactoring` with declaration coordinates + `newName`. Verify with another `search_symbol` that the old name is gone.
@@ -69,17 +74,15 @@ Before calling **any** tool, resolve `<ide_mcp_name>` — the actual MCP server 
 
 When a `PostToolUse` hook returns `additionalContext` containing IDE quality issues, **act immediately — never ask the user first**:
 
-- **Errors present** (hook blocks the edit): fix every listed error now. Use `apply_quick_fix` when a fix name is known; otherwise edit the file directly at the indicated line. After all errors are resolved, summarize: *"Fixed N error(s): • L{line}: {what you did}..."* If warnings were also listed, mention them and ask whether to fix those too.
-- **Warnings listed** (hook does not block): apply `apply_quick_fix` for each warning. Summarize what was fixed.
+- **Errors present** (hook blocks the edit): fix every listed error now. Edit the file directly at the indicated line. After all errors are resolved, summarize: *"Fixed N error(s): • L{line}: {what you did}..."* If warnings were also listed, mention them and ask whether to fix those too.
+- **Warnings listed** (hook does not block): edit the file at each indicated line. Summarize what was fixed.
 - **Pre-existing issues** (existed before your edit): treat them identically — add an explicit step to your plan and fix them. Never dismiss an issue as "pre-existing / not part of this task" and stop. Every issue the hook reports must be resolved.
 - **Pre-existing errors** (errors that existed before your edit, not introduced by you): do not ignore them. Add an explicit step to your plan to fix them — treat them the same as errors you introduced.
 
 ### Critical rules
 
-- `apply_quick_fix` coordinates must come from a **fresh** inspection call — any prior write shifts line numbers.
-- `fixName` must be the **exact** string from `get_inspections` — never paraphrase or guess.
 - `rename_refactoring` is atomic across all usages — never edit identifier text manually.
-- `apply_quick_fix`, `run_inspection_kts`, `generate_psi_tree` may not be exposed by every IDE MCP server. If unavailable, tell the user which MCP module is needed.
+- `run_inspection_kts`, `generate_psi_tree` may not be exposed by every IDE MCP server. If unavailable, tell the user which MCP module is needed.
 - No MCP tools exist for move / safe-delete / extract / change-signature — tell the user to do these in the IDE.
 
 ---
@@ -133,6 +136,7 @@ For `.uproject` solutions the runner picks itself: editor connected + Live Codin
   - By code location: `filePath` + `line` (from run points).
   - One-shot overrides (only when `supportsDynamicLaunchOverrides=true`): `programArguments`, `workingDirectory`, `envs`. `""` keeps existing; `" "` (whitespace) clears. `envs` merges over existing.
   - `waitForExit=true` (default): wait up to `timeout` ms. `waitForExit=false`: fire-and-forget (servers). Returns `output`, optional `exitCode`, `fullOutputPath`, `sessionId`.
+- **`findTests`** — find existing C# tests for a given production class and method. Pass class + method name; returns matching test files and method names.
 
 ### Workflow
 
@@ -170,8 +174,13 @@ For `.uproject` solutions the runner picks itself: editor connected + Live Codin
 | File by name or glob pattern | `search_file` |
 | Literal substring in file contents | `search_text` |
 | Regex pattern in file contents | `search_regex` |
+| Unified search with explicit mode (file/text/symbol/regex) | `skill_search` |
+| Symbol info at a specific file position | `get_symbol_info` |
+| Call hierarchy for a method/function | `analyze_calls` |
 
 Do not use `search_text` for symbol or file lookups — `search_symbol` is semantic (declaration-aware, ignores comments/strings); `search_file` is far cheaper for name searches.
+
+Prefer `skill_search` when mode is ambiguous or you want a single tool for a unified lookup. Use `search_symbol` / `search_file` / `search_text` / `search_regex` directly when the mode is certain.
 
 ### Glob filtering (`paths`)
 
@@ -188,7 +197,7 @@ All tools accept `paths` — project-relative globs. `!` prefix excludes (e.g. `
 ### Pitfalls (CLI dispatcher)
 
 When tools are reached through a CLI dispatcher using `--paramName value` format:
-- Parameter is `q` not `pattern`/`query`/`name` — all four tools use `q`.
+- Parameter is `q` not `pattern`/`query`/`name` — all four search tools use `q`.
 - Bare extension `.cpp` ≠ "files ending in .cpp" — use `*.cpp` (`**/*.cpp`).
 - Brace expansion `{a,b}` may not be portable — issue one call per extension.
 
@@ -200,6 +209,27 @@ When tools are reached through a CLI dispatcher using `--paramName value` format
 
 ---
 
+## ide:files
+
+### Tool selection
+
+| Goal | Tool |
+|------|------|
+| Read file contents | `read_file` |
+| Apply a patch to a file | `apply_patch` |
+| Create a new file | `create_new_file` |
+| Open a file in the editor | `open_file_in_editor` |
+| List directory tree | `list_directory_tree` |
+| Get all currently open file paths | `get_all_open_file_paths` |
+
+### Notes
+
+- **`read_file`** reads from the project directory or any project dependency. Use it to inspect source before editing. There is no `get_file_text_by_path` — always use `read_file`.
+- **`apply_patch`** accepts Codex `apply_patch` format or unified git diff. Use for multi-hunk changes; prefer the Edit tool for single-location edits.
+- **`list_directory_tree`** is cheaper than `search_file` when you know the directory and want an overview.
+
+---
+
 ## ide:debugger
 
 ### Tool reference
@@ -208,6 +238,11 @@ When tools are reached through a CLI dispatcher using `--paramName value` format
 - `xdebug_start_debugger_session` — start by `configurationName` or `filePath`+`line`. Use launch overrides only when `supportsDynamicLaunchOverrides=true`.
 - `xdebug_get_debugger_status` — list active sessions and state. Call first when `sessionId` is unknown.
 - `xdebug_control_session` — actions: `STEP_INTO`, `STEP_OVER`, `STEP_OUT`, `RESUME`, `PAUSE`, `STOP`, `WAIT_FOR_PAUSE`, `DRAIN_EVENTS`. After `RESUME`, always follow with `WAIT_FOR_PAUSE` (timeout 30000–120000 ms). Steps/pause: 5000–15000 ms.
+- `attach_to_process` — attach Rider's debugger to an already-running local process by PID (managed .NET).
+- `xdebug_attach_to_process` — attach to a locally running process by PID; supports managed (.NET) and mixed-mode.
+- `xdebug_start_mixed_mode_debug` — attach in mixed-mode (managed + native) to a running process by PID.
+- `xdebug_memory_dump` — load a process memory dump (.dmp / minidump / core) for post-mortem debugging.
+- `ignore_exception` — stop the debugger from breaking on a specific .NET exception type.
 
 **Breakpoints**
 - `xdebug_set_breakpoint` — create or update. Modes: **location** (`filePath`+`line`, no `breakpointId`) or **ID** (`breakpointId`; optional relocation). Supports `condition`, `isLogMessage`, `isLogStack`, `temporary`, `suspendPolicy` (ALL/THREAD/NONE), `enabled`. Mute-all mode: pass only `sessionId`+`breakpointsMuted`. Inspect returned `lineText` to confirm placement.
@@ -259,6 +294,22 @@ When tools are reached through a CLI dispatcher using `--paramName value` format
 
 ---
 
+## ide:git
+
+### Tool reference
+
+| Tool | Purpose |
+|------|---------|
+| `get_repositories` | List all VCS roots in the project |
+| `git_status` | Git status for one or more repositories; returns staged, unstaged, untracked files |
+
+### Notes
+
+- Use `get_repositories` first to discover VCS root paths, then pass them to `git_status`.
+- For actual git operations (commit, push, branch), use the Bash tool with git commands — these MCP tools are read-only status reporters.
+
+---
+
 ## ide:long-ops
 
 Builds, cooks, packages, large test runs — anything that takes longer than a couple of minutes — must never run in the foreground. A blocking shell call fills the context with thousands of compile/cook lines and locks the agent until completion. Follow this protocol every time.
@@ -307,4 +358,3 @@ For builds started through `build_solution_start` you have two ways to backgroun
 
 - **Foreground-poll until known-long, then background.** Poll for 30-60 s; if state is still `Running` and you have no reason to expect immediate completion, drop into the protocol above. The poll itself can keep running as a background `Bash` script that calls the MCP tool and writes results to a log.
 - **Read the IDE's run log directly.** UBT / dotnet build invocations driven by the IDE write structured output to `out/dev-data/<ide-system>/tmp/ij_run__*.log` (path varies per IDE). Tail that file with Monitor while the build runs.
-/

@@ -198,23 +198,24 @@ handle = unreal.register_slate_post_tick_callback(lambda d: apply())
 
 The reference implementation is `_mode_primitives`. Verified: pawn delta ≈ +123 units for `add_movement_input` forward, duration 1.5 s.
 
-### Mode 3 — Enhanced Input injection (C++ path)
+### Mode 3 — Enhanced Input injection (C++ path, live)
 
-Goes through the project's IA_Move / IA_Jump assets so modifiers, triggers, and action consumption all run normally — the "most realistic" path. **Cannot be driven from Python in UE 5.8** because:
+Goes through the project's IA_Move / IA_Jump assets so modifiers, triggers, and action consumption all run normally — the "most realistic" path. **Driven from C++**, surfaced via `simulate_input mode="enhanced"`. The Python-only path is not viable in UE 5.8 because:
 
 - `PlayerController.player` UPROPERTY is protected (`Property 'Player' for attribute 'player' on '<PC>' is protected and cannot be read`).
 - `GetLocalPlayer()` and `GetLocalPlayers()` aren't `UFUNCTION`s — reflection (`pc.call_method('GetLocalPlayer')`) returns "Failed to find function".
 - `unreal.find_object(None, 'LocalPlayer_0')` returns `None` (the LP isn't reachable by name from any outer we tried).
 
-C++ has direct access:
+The MCP tool resolves the subsystem in C++:
 
 ```cpp
 ULocalPlayer* LP = PC->GetLocalPlayer();
 auto* EIS = LP->GetSubsystem<UEnhancedInputLocalPlayerSubsystem>();
-EIS->InjectInputForAction(IA_Move, FInputActionValue(FVector2D(0, 1)), {}, {});
+EIS->StartContinuousInputInjectionForAction(IA, Value,
+    TArray<UInputModifier*>(), TArray<UInputTrigger*>());
 ```
 
-Once C++ is in place the corresponding MCP tool layer surfaces an `inject_for_action` call accepting `(asset_path, value_kind, value)` — and a paired clear/stop. `EnhancedInputLocalPlayerSubsystem` already exposes `start_continuous_input_injection_for_action` / `stop_continuous_input_injection_for_action` in the Python binding, so once we have the EIS instance from C++ (or a future Python-exposed `GetLocalPlayer`) the actual injection plumbing is one call.
+— see `RiderAgentTools/Private/InputSimulator.cpp` (`HandleEnhanced`). Injection persists until the caller releases it with `simulate_input { mode: "enhanced", enhancedAssetPath: "...", enhancedClear: true }`, which maps to `StopContinuousInputInjectionForAction(IA)`.
 
 The IA asset paths for the validation project (`MyProject58Preview`):
 
@@ -225,7 +226,15 @@ The IA asset paths for the validation project (`MyProject58Preview`):
 /Game/Input/Actions/IA_MouseLook
 ```
 
-The reference (non-working in Python, kept as a structured stub) is `_mode_enhanced` in the prototype — it returns a clear error message documenting the limitation.
+Value-kind mapping (`enhancedValueKind`):
+
+| Kind | Wire fields | Built as |
+|---|---|---|
+| `axis2d` (default) | `enhancedAxis2dX`, `enhancedAxis2dY` | `FInputActionValue(FVector2D(x, y))` |
+| `axis1d` | `enhancedAxis1d` | `FInputActionValue(static_cast<float>(v))` |
+| `bool` | `enhancedBool` | `FInputActionValue(bool)` |
+
+The Python prototype's `_mode_enhanced` is kept as a structured stub — it documents the Python-side limitation and points at the `simulate_input mode="enhanced"` MCP call as the real entry point.
 
 ### Console events
 
@@ -245,17 +254,21 @@ Only fires events that the gameplay code exposes via `UFUNCTION(Exec)` or custom
 
 ---
 
-## Planned MCP shape
+## Live MCP shape
 
-The toolset surfaces three independent entry points (per user request: "all of the above"). Each maps to one mode above:
+All three modes ship behind a **single action-dispatched MCP tool**, `simulate_input { mode, ... }` (see `ide-ue:input` in SKILL.md for the full table). The dispatcher in `RiderAgentTools/Private/InputSimulator.cpp` (`Dispatch`) routes on `mode` and arms an `FTSTicker` on the game thread; at most one ticker is active at a time (every call starts with `CancelActiveTicker()`).
 
-| MCP tool | Mode | Sustain semantics | Args |
+| mode | Maps to | Sustain semantics | Required params |
 |---|---|---|---|
-| `ue_simulate_input` | actions | per-tick driver walks list | `actions: [{type, direction?, duration?, yaw?, pitch?, scale?}]` |
-| `ue_input_primitive` | primitives | sustained for `duration`, one knob | `call: add_movement_input|add_yaw_input|add_pitch_input|jump, direction?, scale?, value?, duration?` |
-| `ue_inject_enhanced_input` | enhanced | persists until cleared (C++ subsystem call) | `asset_path, value_kind: axis2d|axis1d|bool, value, clear?: bool` |
+| `actions` | Mode 1 above | per-tick driver walks the list, advancing on `Elapsed >= duration` | `actions: [{type: "move"|"jump"|"look"|"wait", direction?, duration?, yaw?, pitch?, scale?}]` (non-empty) |
+| `primitive` | Mode 2 above | sustained for `primitiveDuration`, one knob per tick (jump is one-shot) | `primitiveCall: "add_movement_input"|"add_yaw_input"|"add_pitch_input"|"jump"` (+ optional `primitiveDirection`, `primitiveScale`, `primitiveValue`, `primitiveWorldVec`, `primitiveDuration`) |
+| `enhanced` | Mode 3 above | persists in `UEnhancedInputLocalPlayerSubsystem` until released by a paired `enhancedClear=true` call | `enhancedAssetPath` (+ optional `enhancedValueKind`, `enhancedAxis2dX/Y`, `enhancedAxis1d`, `enhancedBool`, `enhancedClear`) |
 
-The reference prototype that exercises modes 1 and 2 lives at `D:/Projects/ultimate2/.ai/scratch/ue-prototypes/input_prototype.py`. Mode 3 is stubbed there and is implemented during the C++ port.
+Response shape is the same for every mode: `{ success, armed, startLocation, startVelocity, nActions, error }`. `startLocation` / `startVelocity` are the **pre-fire** pawn pose at the moment the call landed — pair them with a `ue_execute_python` read later to verify the drive actually moved the pawn.
+
+The reference prototype that exercises modes 1 and 2 (and stubs mode 3 with a structured error) lives at `D:/Projects/ultimate2/.ai/scratch/ue-prototypes/input_prototype.py` and remains useful as a Python-side driver when the MCP layer isn't available; the C++ implementation in `InputSimulator.cpp` mirrors it record-for-record.
+
+> **Prerequisite — TArray marshaller fix.** `mode=actions` (any non-empty `actions[]`) and `ue_execute_python { scripts: [...] }` are wire-formatted as TArrays on the Rider→UE leg. Older bundled-RiderLink builds defined `resize(TArray<T,A>&, int32_t)` as `value.Reserve(size)` in `UE4TypesMarshallers.h:23-25`, which only grows capacity — the next-line indexed assignment in `Buffer::read_array` then trips `TArray::RangeCheck` and hard-faults the editor (STATUS_BREAKPOINT 0x80000003). Fix: change the body to `value.SetNum(size);` and full-rebuild the editor (header-only template — touches many TUs, so Live Coding can't apply it). `mode=primitive` carries `actions=[]` and is the only safe shape against an un-patched build.
 
 ## Quick reference
 
