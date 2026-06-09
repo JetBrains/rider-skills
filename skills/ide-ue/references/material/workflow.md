@@ -113,10 +113,10 @@ unreal.EditorAssetLibrary.save_asset("/Game/Materials/M_Name")
 
 ## Log Checking — ALWAYS Do This
 
-### After every ue_execute: check Python logs
+### After every ue_execute_python: check Python logs
 
 ```
-ue_logs(filter="LogPython", severity="error", lines=10)
+ue_get_logs(filter="LogPython", severity="error", lines=10)
 ```
 
 Common Python errors and what they mean:
@@ -130,7 +130,7 @@ Common Python errors and what they mean:
 ### After recompile_material(): check shader logs
 
 ```
-ue_logs(filter="ShaderCompiler", severity="warning", lines=10)
+ue_get_logs(filter="ShaderCompiler", severity="warning", lines=10)
 ```
 
 **Critical**: The log buffer retains old errors. Always note timestamps.

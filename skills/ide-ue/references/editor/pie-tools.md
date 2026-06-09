@@ -106,6 +106,8 @@ When calling via `mcp__rider__execute_tool --command "ue_play ..."`:
 - **`ue_play(action="play")` returns the pre-fire snapshot.** Wait and re-query to confirm PIE started.
 - **`frame_skip` is a no-op during `Play`.** Only valid while paused.
 - **`stop` is global** — tears down every PIE world, not just the most recent.
+- **Python level-building requires PIE stopped.** During `playState == "Play"`, `EditorActorSubsystem.spawn_actor_from_object`, `EditorAssetLibrary.load_asset`, and `UnrealEditorSubsystem.get_editor_world()` all return `None` silently. Always `ue_play(action="stop")`, wait ~6–7 s, then script. Also: editor-spawned actors are unsaved and vanish on map reload or PIE restart — save the level immediately after building.
+  - Fallback when `load_asset('/Engine/BasicShapes/Cube.Cube')` returns `None` (right after map reload): `unreal.AssetRegistryHelpers.get_asset_registry().get_assets_by_package_name(unreal.Name('/Engine/BasicShapes/Cube'))[0].get_asset()`
 - **Game-project `UGameInstance` override gotcha:** Some games (e.g. Lyra) build their own `Browse()` URL and bypass standard PIE listen-server plumbing. Symptom: `EditorPerProjectUserSettings.ini` shows `PIE_ListenServer` but runtime logs show `Browse: …?Experience=…` with **no `?listen` suffix** — both windows end up standalone. The MCP layer is doing its job; the game's `UGameInstance` is building its own URL. Diagnose:
   ```bash
   grep -E "PlayNetMode|RunUnderOneProcess|PlayNumberOfClients|LastExecutedPlayModeType" \

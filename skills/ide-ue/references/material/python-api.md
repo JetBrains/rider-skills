@@ -1,6 +1,6 @@
 # Material Python API Reference
 
-Quick-reference for all Python API classes and methods used in material workflows. Use `ue_api_search` and `ue_api_type` to discover types not listed here.
+Quick-reference for all Python API classes and methods used in material workflows. Use `ue_execute_python` to introspect types not listed here (see discovery snippets at the bottom).
 
 ## Core Library Aliases
 
@@ -284,8 +284,8 @@ unreal.MaterialExpressionSubstrateSlabBSDF
 
 ```python
 # Via MCP tools:
-ue_logs(filter="LogPython", severity="error", lines=10)      # Python exceptions
-ue_logs(filter="ShaderCompiler", severity="warning", lines=10) # Shader compile errors
+ue_get_logs(filter="LogPython", severity="error", lines=10)      # Python exceptions
+ue_get_logs(filter="ShaderCompiler", severity="warning", lines=10) # Shader compile errors
 
 # Via Python in editor:
 unreal.log("Info message")
@@ -379,12 +379,13 @@ mel.connect_material_expressions(scale_param, "", custom, "Scale")
 When you need a node not listed in SKILL.md:
 
 ```python
-# Search API for expression types
-ue_api_search("MaterialExpression")           # all expression classes
-ue_api_search("MaterialExpressionNoise")      # specific node
+# Search API for expression types — run via ue_execute_python
+import unreal
+classes = [c for c in dir(unreal) if "MaterialExpression" in c]
+print(classes)                                # all expression classes
 
 # Get full details for a type
-ue_api_type("MaterialExpressionFresnel")      # properties, methods, inputs
+help(unreal.MaterialExpressionFresnel)        # properties, methods, inputs
 
 # At runtime, discover input pin names:
 names = mel.get_material_expression_input_names(node)

@@ -1,6 +1,6 @@
 # Material Recipes
 
-Copy-paste-ready Python recipes for common material workflows. Execute via `ue_execute` MCP tool or `ue-exec.sh --script '...'`.
+Copy-paste-ready Python recipes for common material workflows. Execute via `ue_execute_python` MCP tool or `ue-exec.sh --script '...'`.
 
 All recipes use:
 ```python

@@ -94,7 +94,7 @@ debug view, etc.). Inputs may not be available in every permutation, causing err
   compile correctly in all permutations
 - If Custom HLSL is required, **test compilation** by checking editor logs after
   `recompile_material()` — look for `Failed to compile Material` warnings
-- Use `ue_logs(filter="ShaderCompiler", severity="warning")` to detect shader compile failures
+- Use `ue_get_logs(filter="ShaderCompiler", severity="warning")` to detect shader compile failures
 
 **Bad — Custom HLSL with raw input reference:**
 ```python
