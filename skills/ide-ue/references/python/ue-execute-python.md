@@ -46,7 +46,7 @@ Output per result capped at 10,000 chars. For larger output, write to `Saved/*.t
 | Iterate components on CDO | `cdo.get_components_by_class(unreal.ActorComponent)` |
 | C++ inheritance chain | `t = type(cdo); while t and t.__name__ != 'object': chain.append(t.__name__); t = t.__bases__[0]` |
 | AssetRegistry data | `ar = unreal.AssetRegistryHelpers.get_asset_registry(); ad = ar.get_asset_by_object_path(unreal.Name(bp.get_path_name()))` |
-| Asset-registry parent class tag | `ad.get_tag_value('ParentClass')` |
+| Asset-registry tags | `ad.get_tag_value('ParentClass')`, `ad.get_tag_value('NativeParentClass')`, `ad.get_tag_value('ImplementedInterfaces')` |
 
 ## Gotchas
 

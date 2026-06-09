@@ -29,7 +29,13 @@
 | 4 | `standalone`, `process` | Separate OS process |
 | 5 | `simulate`, `simulation` | Simulate in editor — no Pawn, no input |
 
-**`netMode`** aliases: `standalone` (default), `listen` / `listenserver`, `client`.
+**`netMode`** — case-insensitive alias → `EPlayNetMode`:
+
+| Alias | EPlayNetMode | What you get |
+|-------|-------------|--------------|
+| `standalone` (default), `single` | `PIE_Standalone` | No networking. `players > 1` produces multiple disconnected standalone instances. |
+| `listen`, `listenserver`, `host` | `PIE_ListenServer` | First PIE window opens the map with `?listen` → listen server on `127.0.0.1:17777`. Remaining `players - 1` windows are clients. |
+| `client` | `PIE_Client` | All PIE windows are clients. Pair with `dedicatedServer=true` for a headless server (else nothing to connect to). |
 
 **Other PIE knobs:**
 
@@ -100,7 +106,12 @@ When calling via `mcp__rider__execute_tool --command "ue_play ..."`:
 - **`ue_play(action="play")` returns the pre-fire snapshot.** Wait and re-query to confirm PIE started.
 - **`frame_skip` is a no-op during `Play`.** Only valid while paused.
 - **`stop` is global** — tears down every PIE world, not just the most recent.
-- **Game-project `UGameInstance` override gotcha:** Some games (e.g. Lyra) build their own `Browse()` URL and bypass standard PIE listen-server plumbing. Symptom: `EditorPerProjectUserSettings.ini` shows `PIE_ListenServer` but both windows run standalone. Fix: use a map that respects standard PIE URL routing, or disable the custom `UGameInstance` route while testing.
+- **Game-project `UGameInstance` override gotcha:** Some games (e.g. Lyra) build their own `Browse()` URL and bypass standard PIE listen-server plumbing. Symptom: `EditorPerProjectUserSettings.ini` shows `PIE_ListenServer` but runtime logs show `Browse: …?Experience=…` with **no `?listen` suffix** — both windows end up standalone. The MCP layer is doing its job; the game's `UGameInstance` is building its own URL. Diagnose:
+  ```bash
+  grep -E "PlayNetMode|RunUnderOneProcess|PlayNumberOfClients|LastExecutedPlayModeType" \
+    <UProject>/Saved/Config/<Platform>Editor/EditorPerProjectUserSettings.ini
+  ```
+  If the ini shows the right values but PIE still runs standalone, fix on the game's side: pick a map that respects standard PIE URL routing (in Lyra, `L_LyraFrontEnd` does), or temporarily disable the custom `UGameInstance` route.
 
 ## Log streaming recipes
 
