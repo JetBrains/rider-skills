@@ -85,6 +85,14 @@
 6. Stream logs: `t0 = now_ms()` before the play call; loop `ue_get_logs(sinceTimestampMs=cutoff, follow=true, followTimeoutMs=8000)`; advance `cutoff = entries[-1].timestampMs + 1`.
 7. `ue_play(action="stop")` to tear down all PIE worlds.
 
+## `mcp__rider__execute_tool` CLI gotchas
+
+When calling via `mcp__rider__execute_tool --command "ue_play ..."`:
+
+- `--action play` is **required** — omitting it raises `Missing required parameters: action`.
+- `--netMode` takes **string aliases only** (`standalone`, `listen`, `client`). Integer form (e.g. `0`) raises `Unknown netMode '0'`.
+- Minimal working call: `ue_play --action play --mode viewport --players 1 --netMode standalone --runUnderOneProcess true`
+
 ## Critical rules
 
 - **Filter `ue_get_logs` always** — unfiltered buffer is dominated by `LogEOSSDK` / `LogHttp` chatter.

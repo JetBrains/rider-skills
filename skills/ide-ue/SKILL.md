@@ -64,6 +64,12 @@ Read the reference file for the domain before acting. All paths are relative to 
 | **Pipelines** | canonical end-to-end workflows (P1–P10) | pipelines/p1-p10.md |
 | **Build / Long-ops** | Live Coding, full UBT rebuild, RunUAT cook/package | build/live-coding-ubt.md |
 
+### Asset & Tag Index (editor not required — Rider index only)
+
+| Domain | When to use | Reference |
+|--------|-------------|-----------|
+| **Assets** | find `.uasset`/`.umap` by name or base class, enumerate BP hierarchies, inspect CDO defaults, audit GameplayTags — works even when editor is disconnected | assets/asset-tools.md |
+
 ### Knowledge Domains (editor not required — reads references, generates / reviews code)
 
 | Domain | When to use | Reference |
