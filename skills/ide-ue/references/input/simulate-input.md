@@ -106,6 +106,16 @@ Empirical (third-person template): 1 s forward scale 1.0 → ~91 units delta; ju
 
 Empirical (DemoPro57 / FirstPerson corridor): max walk speed 600 UU/s; 5 s `mode=actions` forward → ~2450 UU horizontal (24.5 m). Effective horizontal rate is ~490 UU/s because the level has ramps — forward input converts partially to vertical. Target 30 m → use ~6.1 s forward duration to compensate.
 
+## Pitfalls
+
+| # | Mistake | Fix |
+|---|---------|-----|
+| 1 | **Polling right after `simulate_input`** — the call returns immediately; the player has not moved yet. | Use the Slate tick-driver callback (see **Python tick-driver fallback**) to sample state inside the running tick, not after the call returns. |
+| 2 | **`primitiveDuration` not calculated** — e.g. 3 s at 490 UU/s = 1470 units; overshoots the bot's follow radius and the bot stops chasing before you can measure anything. | Compute: `duration = units_to_cover / effective_speed`. For DemoPro57 (490 UU/s): 200 units → 0.41 s. |
+| 3 | **Moving the player with Python teleportation instead of `simulate_input`** — `actor.set_actor_location(...)` bypasses physics, may clip through geometry, and produces unreliable AI reactions. | Always use `simulate_input` (or the Slate tick-driver `add_movement_input` form) when testing gameplay mechanics that depend on player movement. |
+| 4 | **Not checking AI distances before expecting a chase** — if `player_dist > follow_radius` the AI will never move, regardless of how correctly the tick is written. | Before arming input, read `bot.get_actor_location()` and `player.get_actor_location()`, compute 2D distance, and confirm it is between `AcceptanceRadius` and `FollowRadius`. |
+| 5 | **`mode=actions` TArray marshaller crash** (older bundled RiderLink) — STATUS_BREAKPOINT 0x80000003 hard fault on `TArray Reserve`. | Use `mode=primitive` for movement; reserve `mode=actions` for sequences that need jump + look. See known-issue note in **Critical rules**. |
+
 ## Verify result
 
 Sample the pawn after the drive completes via `ue_execute_python`.

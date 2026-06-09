@@ -367,3 +367,70 @@ This often exposes race conditions that work on localhost but fail on real netwo
 
 ### Step 5 — Delegate to ue-networking
 If the issue requires deep investigation into prediction, relevancy, dormancy, or custom replication, delegate to the **ue-networking** skill which has specialized knowledge of the networking subsystem.
+
+---
+
+## Workflow 8: Ensure vs Fatal Crash — How to Distinguish
+
+**Symptom:** The crash reporter dialog appears, or the debugger pauses unexpectedly mid-session. You need to know whether the process is dead (fatal) or alive and resumable (ensure).
+
+### Step 1 — Check whether this is an ensure
+
+Open the most recent crash dump directory:
+```
+Saved/Crashes/<CrashGUID>/CrashContext.runtime-xml
+```
+Look for the `IsEnsure` field:
+```xml
+<IsEnsure>true</IsEnsure>
+```
+
+| `IsEnsure` value | Meaning | Action |
+|-----------------|---------|--------|
+| `true` | `ensure()` / `ensureMsgf()` — process is alive, execution paused at the assert site | Resume — see Step 2 |
+| `false` (or absent) | `check()` / `checkf()` / AV — process is dead | Full restart required |
+
+### Step 2 — Verify the crash is from the *current* session
+
+```
+ue_status → processId                         (current editor PID)
+CrashContext.runtime-xml → <ProcessId>        (PID that produced the dump)
+```
+
+If they **differ**: the dump is from a previous editor session. The current session is unaffected.
+- Dismiss the crash reporter dialog.
+- Resume work; no debugger action needed.
+
+If they **match**: the ensure fired in the live process.
+- The process is paused, not dead.
+- Resume with `xdebug_control_session --action resume` (or click Continue in the crash reporter).
+
+### Step 3 — Read the ensure message
+
+When the process is paused, `xdebug_get_stack` shows the ensure site. Key lines in the stack:
+
+```
+FDebug::EnsureFailed(...)          — UE ensure dispatcher
+<YourCode>::SomeFunction(...)      — YOUR code that triggered the ensure
+```
+
+`xdebug_get_frame_values` on the failing frame reveals the local state at the time of the assert.
+
+### Step 4 — Common ensure categories
+
+| Ensure message pattern | Typical cause | Fix direction |
+|------------------------|---------------|---------------|
+| `!HasAnyFlags(RF_ClassDefaultObject)` | A CDO was passed as a world context (e.g. from `get_default_object()`) | Use a live world object; never pass a CDO to gameplay functions |
+| `IsInGameThread()` | UObject access from a background thread / TaskGraph | Wrap in `AsyncTask(ENamedThreads::GameThread, ...)` |
+| `Failed to unload all packages during ForceDeleteObjects` | `CollectGarbage()` called while PIE holds package references | Use `GEngine->ForceGarbageCollection(false)` (deferred) during PIE |
+| `!IsGarbageCollecting()` | Nested GC call — GC invoked from inside a GC pass | Guard with `if (!IsGarbageCollecting())` |
+| `IsValid(Object)` / `Object != nullptr` | Stale pointer to a GC-collected UObject | Add `UPROPERTY()` or use `TWeakObjectPtr` + validity check before access |
+
+### Step 5 — After resuming
+
+Monitor for recurrence with:
+```
+ue_get_logs(minVerbosity="Warning", pattern="Ensure condition failed", count=20)
+```
+
+Ensure failures are logged even when the debugger catches the `__debugbreak()` first — the log entry confirms what fired.

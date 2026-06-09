@@ -113,6 +113,38 @@ bot.set_actor_location(unreal.Vector(220, 0, floor_at(220, 0) + hh), False, Fals
 unreal.get_editor_subsystem(unreal.LevelEditorSubsystem).save_current_level()
 ```
 
+## Character / Pawn mesh CDO setup
+
+Set up CDO mesh properties **before** spawning, then place with `spawn_actor`. Fresh instances inherit the CDO.
+
+### Step 1 — set mesh offset, rotation, and AnimBP on the CDO
+
+```
+ue_execute_python --script "import unreal; bp = unreal.load_asset('/Game/AI/Bot/BP_Bot'); cdo = unreal.get_default_object(bp.generated_class()); mc = cdo.get_component_by_class(unreal.SkeletalMeshComponent); caps = cdo.get_component_by_class(unreal.CapsuleComponent); hh = caps.get_scaled_capsule_half_height(); mc.set_editor_property('relative_location', unreal.Vector(0,0,-hh)); mc.set_editor_property('relative_rotation', unreal.Rotator(pitch=0,yaw=-90,roll=0)); abp = unreal.load_asset('/Game/Characters/Mannequins/Anims/Unarmed/ABP_Unarmed'); mc.set_editor_property('anim_class', abp.generated_class()); unreal.EditorAssetLibrary.save_asset('/Game/AI/Bot/BP_Bot', False); print('loc:', mc.get_editor_property('relative_location')); print('rot:', mc.get_editor_property('relative_rotation')); print('anim:', mc.get_editor_property('anim_class'))"
+```
+
+**Rules:**
+- `relative_location` = `(0, 0, -capsule_half_height)` — places mesh root at capsule bottom (floor level).
+- `relative_rotation` — always use **keyword args**: `Rotator(pitch=0, yaw=-90, roll=0)`. Positional `Rotator(0,-90,0)` silently produces `pitch=-90` (wrong axis). See positional order in ue-execute-python.md.
+- If mesh faces **backward** (180° off): try `yaw=90` instead of `yaw=-90`.
+- If mesh is **upside down**: ensure `roll=0`. Adding `roll=180` flips the mesh down, not up.
+
+### Step 2 — destroy any stale level instance and respawn
+
+CDO changes don't propagate to already-placed actors. Destroy first, then `spawn_actor`:
+
+```
+ue_execute_python --script "import unreal; eas = unreal.get_editor_subsystem(unreal.EditorActorSubsystem); actors = eas.get_all_level_actors(); bot = next((a for a in actors if 'Bot_AI' in a.get_actor_label()), None); eas.destroy_actor(bot) if bot else None; print('destroyed:', bot.get_actor_label() if bot else 'none')"
+```
+
+```
+spawn_actor --assetPath "/Game/AI/Bot/BP_Bot.BP_Bot" --location [220,0,298] --label "Bot_AI"
+```
+
+### Step 3 — verify orientation in Blueprint editor, not level viewport
+
+The level viewport can show a **stale cached actor** that doesn't reflect CDO changes. Open the Blueprint asset in the editor and inspect the **component viewport** there — it shows true CDO property values in real time. Only trust the level viewport after a destroy + respawn cycle.
+
 ## Critical rules
 
 - **Always trace to floor before setting Z.** Never use an arbitrary constant — floor height varies per XY.

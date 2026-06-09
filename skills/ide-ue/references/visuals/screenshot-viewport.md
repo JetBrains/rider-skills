@@ -46,6 +46,8 @@ Files land under:
 - **The MCP call blocks on the game thread** — screenshot needs `FlushRenderingCommands`. Never call `ue_execute_python` inside a screenshot-driven workflow expecting them to interleave.
 - **`asset_preview` defaults to cache-only** — returns a clean error in <1 s rather than risk a render-thread hang. Materials / Textures almost always have cached thumbnails. AnimBPs / ControlRigs often don't — open the asset in the editor once to generate.
 - **UE 5.x render-thread `ensure()` in `VirtualShadowMapCacheManager`** can pause execution when "Break on C++ Exception" is enabled during a screenshot. Non-fatal — resume the session; the PNG is already on disk.
+- **`viewport_camera` → `take_screenshot` stale frame**: After `viewport_camera --action set/move/focus_on_actor`, the viewport may not have re-rendered yet. Calling `take_screenshot` immediately often returns the previous frame. Workaround: call `take_screenshot` a second time — the second call reliably gets the updated frame. `focus_on_actor` triggers a viewport update more reliably than `set`.
+- **No spaces inside array literals**: `[x,y,z]` not `[x, y, z]`. The MCP CLI JSON parser splits on whitespace — a space after a comma inside `--location`, `--rotation`, or `--delta` produces a *"Trailing comma before end of array"* parse error. Always write arrays without interior spaces.
 
 ---
 
