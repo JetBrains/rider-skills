@@ -104,9 +104,21 @@ simulate_input --mode enhanced --enhancedAssetPath /Game/Input/Actions/IA_Move -
 
 Empirical (third-person template): 1 s forward scale 1.0 → ~91 units delta; jump z → +110 units then settles; 1.5 s `primitive` → ~123 units.
 
+Empirical (DemoPro57 / FirstPerson corridor): max walk speed 600 UU/s; 5 s `mode=actions` forward → ~2450 UU horizontal (24.5 m). Effective horizontal rate is ~490 UU/s because the level has ramps — forward input converts partially to vertical. Target 30 m → use ~6.1 s forward duration to compensate.
+
 ## Verify result
 
-Sample the pawn after the drive completes via `ue_execute_python`:
+Sample the pawn after the drive completes via `ue_execute_python`.
+
+> **`mcp__rider__execute_tool --script` pitfall**: `\n` in the arg string is passed as a literal backslash-n, causing `SyntaxError: unexpected character after line continuation character`. Use semicolons for a single-line script — never rely on `\n` newlines in the `--script` value.
+
+Single-line form (safe for `mcp__rider__execute_tool --script`):
+
+```
+ue_execute_python --script "import unreal,json,math; pie_world=unreal.get_editor_subsystem(unreal.UnrealEditorSubsystem).get_game_world(); pawn=unreal.GameplayStatics.get_player_pawn(pie_world,0); l=pawn.get_actor_location(); v=pawn.get_velocity(); sx,sy=START_X,START_Y; dist=math.sqrt((l.x-sx)**2+(l.y-sy)**2); print(json.dumps({'loc':{'x':round(l.x,1),'y':round(l.y,1),'z':round(l.z,1)},'vel_z':round(v.z,1),'dist_cm':round(dist,1),'dist_m':round(dist/100,2)}))"
+```
+
+Multi-line form (for use inside `ue_execute_python` API calls, not execute_tool CLI):
 
 ```python
 import unreal, json
@@ -117,12 +129,10 @@ v = pawn.get_velocity()
 print(json.dumps({'loc': {'x': l.x, 'y': l.y, 'z': l.z}, 'vel': {'x': v.x, 'y': v.y, 'z': v.z}}))
 ```
 
-Check movement state:
+Check movement state (single-line form):
 
-```python
-mc = pawn.get_component_by_class(unreal.CharacterMovementComponent)
-print(mc.movement_mode)               # MOVE_Walking / MOVE_Falling
-print(mc.get_current_acceleration())  # nonzero while add_movement_input fires each tick
+```
+ue_execute_python --script "import unreal; pawn=unreal.GameplayStatics.get_player_pawn(unreal.get_editor_subsystem(unreal.UnrealEditorSubsystem).get_game_world(),0); mc=pawn.get_component_by_class(unreal.CharacterMovementComponent); print(mc.movement_mode)"
 ```
 
 ## Python tick-driver fallback
