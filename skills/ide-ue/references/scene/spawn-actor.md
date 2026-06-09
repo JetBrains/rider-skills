@@ -4,13 +4,15 @@
 
 ## Tool reference
 
+**`spawn_actor` is the primary tool for placing actors.** Use it first — fall back to `ue_execute_python` only when you need to mutate component properties on an existing actor or access APIs that `spawn_actor` doesn't expose.
+
 | Tool | Purpose | When to use |
 |------|---------|-------------|
-| `spawn_actor` | Place an asset on the active design-time level | Any time you need an actor in the scene — use the long object path form |
+| `spawn_actor` | Place an asset on the active design-time level | **Primary choice** for all new actor placement — use the long object path form |
 | `search_assets` | Find `.uasset` by name or base class | Resolve the `assetPath` before calling `spawn_actor` |
 | `viewport_camera` | Position and frame the editor camera | Frame spawned actors with `focus_on_actor` after placing them |
 | `take_screenshot` | Capture the viewport after spawning | Visual verification that the actor landed at the right location |
-| `ue_execute_python` | Sweep and destroy actors by label prefix | Cleanup between test runs; see cleanup script below |
+| `ue_execute_python` | Mutate component properties, set CDO fields, sweep/destroy by label | Fallback when `spawn_actor` can't do the job (e.g. setting skeletal mesh on existing actor) |
 | `ue_status` | Confirm editor connected | Always check before spawning |
 
 `spawn_actor { assetPath, location, rotation?, scale?, label? }`
@@ -41,8 +43,79 @@ Returned: `{ spawned, actorLabel?, actorName?, location: {x,y,z} }`
 | Rotated + scaled | `spawn_actor --assetPath "/Engine/BasicShapes/Cone.Cone" --location [0,0,200] --rotation [0,90,0] --scale [2,2,2]` |
 | Spawn then frame | `spawn_actor ... --label "Probe"` → `viewport_camera --action focus_on_actor --actor "Probe"` |
 
+## Correct Z placement — always trace to floor first
+
+Never use an arbitrary Z value. The floor surface height varies per XY position and must be measured.
+
+### Step 1 — trace to find floor Z
+
+```python
+import unreal
+w = unreal.get_editor_subsystem(unreal.UnrealEditorSubsystem).get_editor_world()
+kw = dict(
+    trace_channel=unreal.TraceTypeQuery.TRACE_TYPE_QUERY1,  # WorldStatic
+    trace_complex=True, actors_to_ignore=[],
+    draw_debug_type=unreal.DrawDebugTrace.NONE, ignore_self=True,
+    trace_color=unreal.LinearColor(1,0,0,1),
+    trace_hit_color=unreal.LinearColor(0,1,0,1), draw_time=0.0
+)
+h = unreal.SystemLibrary.line_trace_single(
+    w, unreal.Vector(x, y, 5000), unreal.Vector(x, y, -1000), **kw)
+t = h.to_tuple()
+# t[0] = blocking_hit (bool), t[5] = impact_point (Vector)
+floor_z = t[5].z if t[0] else 0.0
+```
+
+`HitResult` has no `.blocking_hit` attribute — use `.to_tuple()`: index 0 = hit bool, index 5 = impact_point Vector.
+
+### Step 2 — add pivot-to-floor offset
+
+| Actor type | Pivot location | Correct Z formula |
+|------------|---------------|-------------------|
+| `PlayerStart` | Foot level (bottom) | `Z = floor_z` |
+| `Character` / `Pawn` | Capsule center | `Z = floor_z + capsule_half_height` |
+| Static Mesh (pivot at bottom) | Bottom of mesh | `Z = floor_z` |
+| Static Mesh (pivot at center) | Bounding box center | `Z = floor_z + bounds_extent.z` |
+
+Get capsule half-height: `actor.get_component_by_class(unreal.CapsuleComponent).get_scaled_capsule_half_height()` (typically 88 cm for standard Characters).
+
+Get bounds for any actor: `origin, extent = actor.get_actor_bounds(True)` — then `extent.z` = half the bounding box height from center.
+
+### Editor "End" key equivalent
+
+The editor's **End** key snaps selected actors down to the nearest floor surface automatically. In Python there is no direct API binding for this — use the line-trace pattern above instead. When using the UE Editor manually, select the actor and press **End** to snap it to the floor; this eliminates guessing Z entirely.
+
+### Worked example — place PlayerStart and Character bot
+
+```python
+import unreal
+w = unreal.get_editor_subsystem(unreal.UnrealEditorSubsystem).get_editor_world()
+actors = unreal.EditorLevelLibrary.get_all_level_actors()
+ps  = next(a for a in actors if 'PlayerStart' in a.get_name())
+bot = next(a for a in actors if 'bot' in a.get_name().lower())
+
+kw = dict(trace_channel=unreal.TraceTypeQuery.TRACE_TYPE_QUERY1, trace_complex=True,
+          actors_to_ignore=[], draw_debug_type=unreal.DrawDebugTrace.NONE,
+          ignore_self=True, trace_color=unreal.LinearColor(1,0,0,1),
+          trace_hit_color=unreal.LinearColor(0,1,0,1), draw_time=0.0)
+
+def floor_at(x, y):
+    h = unreal.SystemLibrary.line_trace_single(
+            w, unreal.Vector(x, y, 5000), unreal.Vector(x, y, -1000), **kw)
+    t = h.to_tuple()
+    return t[5].z if t[0] else 100.0
+
+caps = bot.get_component_by_class(unreal.CapsuleComponent)
+hh   = caps.get_scaled_capsule_half_height() if caps else 88.0
+
+ps .set_actor_location(unreal.Vector(0,   0, floor_at(0,   0)     ), False, False)
+bot.set_actor_location(unreal.Vector(220, 0, floor_at(220, 0) + hh), False, False)
+unreal.get_editor_subsystem(unreal.LevelEditorSubsystem).save_current_level()
+```
+
 ## Critical rules
 
+- **Always trace to floor before setting Z.** Never use an arbitrary constant — floor height varies per XY.
 - **JSON-array form is mandatory** — `[0,0,100]`, NOT `0,0,100`.
 - **`assetPath` is a long object path** (`PackageName.ObjectName`). Disk `.uasset` paths are NOT accepted.
 - **Asset kind decides the spawn path** (C++-side): `UClass` / `_C` → `SpawnActorFromClass`; anything else → `SpawnActorFromObject`. Non-placeable assets return `spawned=false` with a diagnostic.
@@ -72,7 +145,9 @@ Returned: `{ spawned, actorLabel?, actorName?, location: {x,y,z} }`
 
 `UBlueprint::GeneratedClass` is a `TSubclassOf<UObject>`; the handler checks `IsChildOf(AActor::StaticClass())` before spawning — non-actor assets return a clean error.
 
-## Python equivalent (when MCP unavailable)
+## Python equivalent — fallback only
+
+Use `ue_execute_python` **only** when `spawn_actor` is not sufficient (e.g. you need to mutate component properties on an existing actor, or set CDO fields after spawn). For all new actor placement, prefer `spawn_actor`.
 
 ```python
 import unreal
