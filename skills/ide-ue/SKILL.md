@@ -57,9 +57,9 @@ Read the reference file for the domain before acting. All paths are relative to 
 | Domain | When to use | Reference |
 |--------|-------------|-----------|
 | **Editor / PIE / Logs** | health, play/pause/stop/frame_skip, log streaming, PIE networking, editor scripting | editor/pie-tools.md, editor/docs_editor_utilities.md, editor/docs_python_scripting.md, editor/docs_remote_control.md, editor/docs_scriptable_tools.md, editor/docs_subsystems.md, editor/niagara.md, editor/recipes.md, editor/world-partition-operations.md |
-| **Visuals** | screenshot editor or viewport, drive viewport camera | visuals/screenshot-viewport.md |
+| **Visuals** | screenshot editor or viewport, drive viewport camera | visuals/screenshot-viewport.md, editor/viewport-camera.md |
 | **Scene** | place / spawn an actor on the design-time level | scene/spawn-actor.md |
-| **Input** | PIE input simulation, Enhanced Input Actions, Mapping Contexts | input/simulate-input.md, input/eis-reference.md, input/eis-patterns.md, input/eis-pitfalls.md, input/crossplatform-input.md |
+| **Input** | PIE input simulation, Enhanced Input Actions, Mapping Contexts | input/simulate-input.md, input/simulate-user-input.md, input/eis-reference.md, input/eis-patterns.md, input/eis-pitfalls.md, input/crossplatform-input.md |
 | **Editor Python** | run Python in the editor game thread | python/ue-execute-python.md |
 | **Pipelines** | canonical end-to-end workflows (P1–P10) | pipelines/p1-p10.md |
 | **Build / Long-ops** | Live Coding, full UBT rebuild, RunUAT cook/package | build/live-coding-ubt.md |
