@@ -130,9 +130,61 @@ Place nodes left-to-right following execution flow. Group related logic vertical
 
 ## MCP tools
 
-| Tool | Purpose | Scenario |
-|------|---------|----------|
-| `ue_execute_python` | Inspect existing graph nodes via AgentBridge | Call `ab.get_blueprint_graph_nodes(bp_path, "EventGraph")` to list all node classes and positions before deciding what to add |
-| `search_assets` | Find a Blueprint asset to inspect | Resolve the full asset path needed for `ab.get_blueprint_graph_nodes` or `export_graph_ir` |
-| `get_asset_properties` | Read CDO defaults on a Blueprint | Verify that node params (e.g. function references) produce the expected runtime values |
-| `ue_status` | Confirm editor idle before graph operations | Graph node APIs fail silently during PIE; check state first |
+All Blueprint node work goes through `ue_execute_python` + AgentBridge. Confirm `ue_status` first — graph APIs are no-ops during PIE.
+
+| Tool | Purpose | When to use |
+|------|---------|-------------|
+| `ue_status` | Confirm editor connected and not in PIE | Required before all graph operations |
+| `ue_execute_python` | All Blueprint node operations via AgentBridge | Inspect, add, connect, set pin defaults, compile, save |
+| `search_assets` | Find a Blueprint asset by name or class | Resolve `/Game/...` path before any AgentBridge call |
+| `get_asset_properties` | Read CDO property values from a `.uasset` | Verify function-reference node params without running the game |
+| `get_class_hierarchy` | All Blueprint subclasses of a C++ class | Enumerate BPs before a batch node update |
+| `lint_files` / `get_file_problems` | Check Blueprint source for errors | Validate after bulk graph changes |
+
+### Inspect existing node types
+
+```python
+import unreal, json
+ab = unreal.AgentBridgeLibrary
+nodes = ab.get_blueprint_graph_nodes('/Game/MyBP', 'EventGraph')
+print(json.dumps(json.loads(nodes), indent=2))
+# Returns [{id, class, x, y, params, pins}] — class matches K2Node paths in this file
+```
+
+Always call this before adding nodes — avoids duplicate events (only ONE `Event BeginPlay` per BP).
+
+### Export full graph IR (preferred for multi-node inspection/edit)
+
+```python
+from bp_ir import export_graph_ir, apply_graph_ir
+ir = export_graph_ir('/Game/MyBP', 'EventGraph')          # full graph as JSON
+result = apply_graph_ir('/Game/MyBP', 'EventGraph', modified_ir, clear_existing=True)
+```
+
+IR is diffable and does the whole change in one round-trip. Use low-level AgentBridge only for single-node additions.
+
+### Add a node, wire it, compile
+
+```python
+import unreal
+ab = unreal.AgentBridgeLibrary
+bp = '/Game/MyBP'
+
+node_id = ab.add_blueprint_node(bp, 'EventGraph', 'K2Node_CallFunction',
+    '{"FunctionReference": "/Script/Engine.KismetSystemLibrary:PrintString"}', 300, 0)
+ab.connect_blueprint_pins(bp, 'EventGraph', 'K2Node_Event_0', 'then', node_id, 'execute')
+ab.set_pin_default_value(bp, 'EventGraph', node_id, 'InString', 'Hello')
+
+bp_asset = unreal.EditorAssetLibrary.load_asset(bp)
+unreal.BlueprintEditorLibrary.compile_blueprint(bp_asset)
+unreal.EditorAssetLibrary.save_asset(bp)
+```
+
+### Workflow
+
+1. `ue_status` — require `connected = true` and `playState != "Play"`.
+2. `search_assets { query: "MyBP" }` — get the `/Game/...` path.
+3. `ue_execute_python` → `ab.get_blueprint_graph_nodes(bp_path, graph)` — audit what's there.
+4. Make the change (IR for multi-node; low-level AgentBridge for single-node).
+5. Compile + save in the same `ue_execute_python` call.
+6. `get_asset_properties` or `ue_status` to verify.
