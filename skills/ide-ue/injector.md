@@ -1,15 +1,28 @@
 # Unreal Engine project — use `ide-ue`
 
-This is an Unreal Engine codebase. The `ide-ue` skill is the **UE-specific** surface layered on top of `ide`:
+This is an Unreal Engine codebase. `ide-ue` is the **single skill** for all UE work — Rider MCP driver plus full domain expertise.
 
-- **Editor lifecycle, PIE control, log streaming** (`ide-ue:editor`)
-- **Asset & GameplayTag index** (`ide-ue:assets`)
-- **Editor Python** (`ide-ue:python`)
-- **Canonical UE pipelines** (`ide-ue:pipelines`)
-- **UE build addenda** on top of generic `ide:build` (`ide-ue:build`)
-- **Long-running cook/package jobs** (`ide-ue:long-ops`)
+**Editor automation** (live editor via `ue_*` tools):
+- PIE lifecycle, log streaming, editor health
+- Asset search, GameplayTag index, class hierarchy
+- Screenshots, viewport camera
+- Place/spawn actors on level
+- Simulate player input (primitive, action-sequence, Enhanced Input)
+- Editor Python scripting (game thread)
+- Canonical end-to-end pipelines P1–P10
+- Live Coding, UBT rebuild, RunUAT cook/package
+
+**Knowledge domains** (no editor required):
+- C++, Blueprint, Architecture, AI/BT/EQS, Animation
+- GAS, GameplayCues, Networking, Physics
+- Graphics/Rendering, Materials, Level Design, Data, PCG
+- Cinematics/Sequencer, UI (UMG/Blueprint), UI C++
+- Builder/UBT, Platform/Packaging, Plugin, Profiler, Testing
+- Console variables / UE Python API
 
 **Rules:**
 
-1. For UE-specific work (editor, assets, tags, Python, cook/package, PIE), invoke `ide-ue` via the Skill tool.
-2. For solution build, run configurations, debugging, search, and file editing, keep using the generic `ide` skill — `ide-ue` only adds UE-specific addenda.
+1. Invoke `ide-ue` for all UE work — editor automation, asset queries, code, architecture, AI, animation, build, packaging.
+2. For IDE-only tasks (build .NET solutions, run configurations, debug C# code, search files in non-UE repos): use `ide` skill — `ide-ue` is the UE-specific layer on top.
+3. Resolve the Rider MCP prefix via the GATE in `SKILL.md` before calling any `ue_*` tool.
+4. If the project has no `.uproject` file: treat it as a normal engineering task — do not invoke UE automation.

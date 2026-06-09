@@ -294,22 +294,6 @@ When tools are reached through a CLI dispatcher using `--paramName value` format
 
 ---
 
-## ide:git
-
-### Tool reference
-
-| Tool | Purpose |
-|------|---------|
-| `get_repositories` | List all VCS roots in the project |
-| `git_status` | Git status for one or more repositories; returns staged, unstaged, untracked files |
-
-### Notes
-
-- Use `get_repositories` first to discover VCS root paths, then pass them to `git_status`.
-- For actual git operations (commit, push, branch), use the Bash tool with git commands — these MCP tools are read-only status reporters.
-
----
-
 ## ide:long-ops
 
 Builds, cooks, packages, large test runs — anything that takes longer than a couple of minutes — must never run in the foreground. A blocking shell call fills the context with thousands of compile/cook lines and locks the agent until completion. Follow this protocol every time.
