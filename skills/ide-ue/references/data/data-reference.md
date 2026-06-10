@@ -266,7 +266,7 @@ enum_asset = unreal.AssetToolsHelpers.get_asset_tools().create_asset(
     unreal.UserDefinedEnum, factory)
 
 # Or via AgentBridge (safer)
-enum_asset = unreal.AgentBridgeLibrary.ensure_asset(
+enum_asset = unreal.RiderAgentBridgeLibrary.ensure_asset(
     '/Game/Blueprint/Interactable/Extras', 'E_ResourceType',
     'UserDefinedEnum', 'EnumFactory')
 ```

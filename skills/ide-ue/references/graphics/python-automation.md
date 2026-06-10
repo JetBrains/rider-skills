@@ -296,7 +296,7 @@ def apply_render_preset(preset_name):
 ## Important Notes
 
 1. **CVars set via Python are session-only** — they reset when the editor restarts. For persistent settings, modify `DefaultEngine.ini`.
-2. **CVar read/write via AgentBridgeLibrary** — use `unreal.AgentBridgeLibrary.read_c_var('r.Shadow.MaxResolution')` to read and `unreal.AgentBridgeLibrary.write_c_var('r.Shadow.MaxResolution', '2048')` to set. For metadata: `unreal.AgentBridgeLibrary.get_c_var_info('r.Shadow.MaxResolution')` returns JSON with type, help text, flags. Also available via REST: `GET /agent/cvar?name=...` and `POST /agent/cvar`.
+2. **CVar read/write via RiderAgentBridgeLibrary** — use `unreal.RiderAgentBridgeLibrary.read_c_var('r.Shadow.MaxResolution')` to read and `unreal.RiderAgentBridgeLibrary.write_c_var('r.Shadow.MaxResolution', '2048')` to set. For metadata: `unreal.RiderAgentBridgeLibrary.get_c_var_info('r.Shadow.MaxResolution')` returns JSON with type, help text, flags. Also available via REST: `GET /agent/cvar?name=...` and `POST /agent/cvar`.
 3. **Use `.format()` not f-strings** when scripts are embedded in JSON payloads (AgentBridge).
 4. **World reference required** for `execute_console_command` — always get it first.
 5. **Cap asset iterations** to 100-500 to avoid editor hangs on large projects.

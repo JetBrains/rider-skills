@@ -145,7 +145,7 @@ All Blueprint node work goes through `ue_execute_python` + AgentBridge. Confirm 
 
 ```python
 import unreal, json
-ab = unreal.AgentBridgeLibrary
+ab = unreal.RiderAgentBridgeLibrary
 nodes = ab.get_blueprint_graph_nodes('/Game/MyBP', 'EventGraph')
 print(json.dumps(json.loads(nodes), indent=2))
 # Returns [{id, class, x, y, params, pins}] — class matches K2Node paths in this file
@@ -167,7 +167,7 @@ IR is diffable and does the whole change in one round-trip. Use low-level AgentB
 
 ```python
 import unreal
-ab = unreal.AgentBridgeLibrary
+ab = unreal.RiderAgentBridgeLibrary
 bp = '/Game/MyBP'
 
 node_id = ab.add_blueprint_node(bp, 'EventGraph', 'K2Node_CallFunction',

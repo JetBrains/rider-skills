@@ -621,7 +621,7 @@ Check for Blueprint-only projects by looking for:
 ### Creating Widget Blueprints in Blueprint-Only Projects via AgentBridge
 
 ```python
-ab = unreal.AgentBridgeLibrary
+ab = unreal.RiderAgentBridgeLibrary
 
 # Step 1: Create widget Blueprint
 wbp = ab.ensure_asset("/Game/UI/UI_Elements", "UI_MyScreen", "WidgetBlueprint", "WidgetBlueprintFactory")

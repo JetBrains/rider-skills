@@ -1,15 +1,6 @@
 ---
 name: ide-ue
-description: >-
-  Unreal Engine driver + knowledge suite for Rider, the UE Editor, and CLI.
-  Invoke for ANY Unreal Engine task — editor/PIE control, asset & GameplayTag
-  queries, editor Python, input simulation, screenshots/viewport, scene & actor
-  spawning, C++/Blueprint code, architecture, AI/BT/EQS, animation, GAS,
-  GameplayCues, networking, physics, graphics/rendering, materials, level
-  design, data, PCG, cinematics, UI (UMG/C++), build/UBT, packaging, plugins,
-  profiling, testing, and console variables. DO NOT invoke for generic IDE-only
-  work with no UE context (build a .NET solution, debug C#, refactor non-UE
-  files)
+description: Unreal Engine driver + knowledge suite for Rider, the UE Editor, and CLI. Invoke for ANY Unreal Engine task — editor/PIE control, asset & GameplayTag queries, editor Python, input simulation, screenshots/viewport, scene & actor spawning, C++/Blueprint code, architecture, AI/BT/EQS, animation, GAS,GameplayCues, networking, physics, graphics/rendering, materials, level design, data, PCG, cinematics, UI (UMG/C++), build/UBT, packaging, plugins,  profiling, testing, and console variables. DO NOT invoke for generic IDE-only work with no UE context (build a .NET solution, debug C#, refactor non-UE file)
 ---
 
 # Unreal Engine — Rider MCP Driver + Full Skill Suite
@@ -81,16 +72,151 @@ These are the only ways to interact with the editor and index — **never** fall
 ## Universal Rules
 
 - **Pass `rootFolder` on every call** — the solution root (or cwd). Ask once if unknown, then reuse it everywhere.
-- **`ue_health` / `ue_status` first, every session.** If `connected = false`, drop to offline mode: index tools + filesystem + Python scripting only.
+- **`ue_health` / `ue_status` first, every session.** If `connected = false`, do NOT stop — follow the **Editor Launch** mandatory scenario below.
 - **PIE transitions are async** — re-query `ue_status` after ~5–10 s to confirm a state change took effect.
 - **`ue_play` settings are sticky** — always pass `mode`, `players`, `netMode`, and `runUnderOneProcess` explicitly; never inherit from a prior session.
 - **Index tools don't need the editor** — asset/tag/hierarchy/CDO queries work offline.
 
 ---
 
+## Mandatory Scenarios
+
+These three scenarios are **always executed in sequence** when editor automation is needed. Never ask the user to open the editor manually.
+
+### Path variables (resolve once, reuse everywhere)
+
+Before running any scenario, resolve these four variables from the current session context:
+
+| Variable | How to resolve |
+|----------|---------------|
+| `<PROJECT_ROOT>` | The `rootFolder` already known from the session (working directory of the project). |
+| `<PROJECT_NAME>` | Glob `<PROJECT_ROOT>/*.uproject` → filename without `.uproject` extension. |
+| `<PROJECT_UPROJECT>` | `<PROJECT_ROOT>/<PROJECT_NAME>.uproject` |
+| `<UE_VERSION>` | `(Get-Content '<PROJECT_UPROJECT>' \| ConvertFrom-Json).EngineAssociation` → e.g. `"5.4"` |
+| `<UE_ROOT>` | Search common install bases for `UE_<UE_VERSION>`: `C:/Program Files/Epic Games/UE_<UE_VERSION>`, sibling of `<PROJECT_ROOT>` parent, or any drive root. Glob `*/UE_<UE_VERSION>` if unsure. |
+| `<UE_EDITOR_EXE>` | `<UE_ROOT>/Engine/Binaries/Win64/UnrealEditor.exe` (Windows) or `<UE_ROOT>/Engine/Binaries/Mac/UnrealEditor` (Mac) |
+| `<PROJECT_LOG>` | `<PROJECT_ROOT>/Saved/Logs/<PROJECT_NAME>.log` |
+
+---
+
+### SCENARIO 1 — Launch Editor (when `connected: false`)
+
+**Trigger:** `ue_health` returns `{"connected": false}`.
+
+**Never stop here.** Always attempt to launch the editor automatically.
+
+**Step 1 — Check if already running:**
+```bash
+powershell.exe -Command "Get-Process UnrealEditor -ErrorAction SilentlyContinue | Select-Object Id, CPU, WorkingSet"
+# macOS/Linux: pgrep -a UnrealEditor
+```
+If a process is listed → editor is running but MCP not yet connected (still loading). Skip to Scenario 2.
+
+**Step 2 — Resolve `<UE_VERSION>` and `<UE_EDITOR_EXE>`:**
+```bash
+# Windows — read EngineAssociation from .uproject
+powershell.exe -Command "(Get-Content '<PROJECT_UPROJECT>' | ConvertFrom-Json).EngineAssociation"
+
+# Then find the engine binary (try common locations):
+#   C:/Program Files/Epic Games/UE_<UE_VERSION>/Engine/Binaries/Win64/UnrealEditor.exe
+#   <any_drive>/EpicGames/UE_<UE_VERSION>/Engine/Binaries/Win64/UnrealEditor.exe
+# Glob fallback:
+powershell.exe -Command "Get-ChildItem -Path 'C:/','D:/','E:/' -Filter 'UnrealEditor.exe' -Recurse -ErrorAction SilentlyContinue | Where-Object { \$_.FullName -like '*UE_<UE_VERSION>*' } | Select-Object -First 1 -ExpandProperty FullName"
+```
+
+**Step 3 — Launch:**
+```bash
+# Windows
+powershell.exe -Command "Start-Process '<UE_EDITOR_EXE>' -ArgumentList '<PROJECT_UPROJECT>' -WindowStyle Normal"
+
+# macOS/Linux
+open -a '<UE_EDITOR_EXE>' --args '<PROJECT_UPROJECT>'
+# or: '<UE_EDITOR_EXE>' '<PROJECT_UPROJECT>' &
+```
+Empty output = success. Proceed immediately to Scenario 2.
+
+**Step 4 — Immediately proceed to Scenario 2 (connection polling).**
+
+> **Prerequisite:** Rider IDE must be open with this project loaded and the RiderLink plugin enabled (`Edit → Plugins → RiderLink`). The MCP connection routes through Rider — the editor process alone is not enough.
+
+---
+
+### SCENARIO 2 — Poll for MCP Connection
+
+**Trigger:** After launching the editor, or after any `ue_health` → `connected: false`.
+
+**Rule:** Never declare "editor not connected" and stop. Always poll with Monitor + direct MCP checks.
+
+**Step 1 — Arm a Monitor (polls every 15 s, 3-minute window):**
+```bash
+for i in $(seq 1 12); do
+  sleep 15
+  result=$(powershell.exe -Command "& {
+    Add-Type -AssemblyName System.Net.Http
+    \$c = New-Object System.Net.Http.HttpClient
+    try {
+      \$r = \$c.GetAsync('http://localhost:8080/agent/health').Result
+      if (\$r.IsSuccessStatusCode) { echo 'CONNECTED' } else { echo \"HTTP_\$(\$r.StatusCode)\" }
+    } catch { echo 'NOT_READY' }
+  }" 2>/dev/null)
+  echo "Attempt $i: $result"
+  if echo "$result" | grep -q "CONNECTED"; then break; fi
+done
+```
+
+**Step 2 — On each Monitor notification, also call the MCP tool directly:**
+```
+ue_health  (rootFolder: <PROJECT_ROOT>)
+```
+The MCP tool is authoritative — use its `connected` field to confirm before proceeding.
+
+**Step 3 — When `connected: true`, proceed to Scenario 3, then run the original task.**
+
+**Timeout handling:** If 12 attempts (~3 min) elapse without connection:
+1. Confirm Rider is open and the project solution is loaded.
+2. Confirm RiderLink plugin is enabled in the editor (`Edit → Plugins → RiderLink`).
+3. Check for crash: if `Get-Process UnrealEditor` returns nothing, the editor crashed — check `<PROJECT_LOG>` for the cause.
+4. Re-run Scenario 1 (relaunch) if the process is gone.
+
+---
+
+### SCENARIO 3 — Monitor Editor Logs
+
+**Trigger:** Immediately after connecting. Also after any suspected error or silent failure.
+
+**Step 1 — Fetch recent logs via MCP (preferred, always available when connected):**
+```
+ue_get_logs  (rootFolder: <PROJECT_ROOT>, severity: warning, lines: 50)
+```
+Look for errors in: `LogPython`, `LogBlueprint`, `LogUObjectGlobals`, `LogInit`.
+
+**Step 2 — For persistent streaming (long operations, PIE sessions), arm a Monitor:**
+```bash
+tail -f "<PROJECT_LOG>" \
+  | grep -E --line-buffered "Error|Warning|LogPython|LogBlueprint|PIE|Crash|Fatal"
+```
+
+**Step 3 — After every `ue_execute_python` call, fetch Python logs:**
+```
+ue_get_logs  (rootFolder: <PROJECT_ROOT>, filter: "LogPython", lines: 20)
+```
+Python errors in UE **do not raise exceptions** — they print to log and execution continues silently. Always check logs after Python calls.
+
+**Key log categories:**
+| Category | Significance |
+|----------|-------------|
+| `LogPython` | All Python script output and errors |
+| `LogBlueprint` | Blueprint compile errors/warnings |
+| `LogUObjectGlobals` | Asset load failures, CDO errors |
+| `PIE` | Play-in-Editor start/stop/errors |
+| `LogInit` | Startup errors, plugin load failures |
+| `LogRiderLink` | MCP connection status |
+
+---
+
 ## Quick Start
 
-1. **Health check** — `ue_health` or `ue_status`. If disconnected, switch to offline mode.
+1. **Health check** — `ue_health`. If `connected: false` → **Scenario 1** (launch) → **Scenario 2** (poll) → **Scenario 3** (logs).
 2. **Identify the domain** — find the matching row in [Domain Routing](#domain-routing).
 3. **Read the reference first** — load the listed file(s) before generating code or calling tools.
 4. **Automation task** — use `ue_*` tools; always pass `rootFolder`; re-query state after PIE transitions.

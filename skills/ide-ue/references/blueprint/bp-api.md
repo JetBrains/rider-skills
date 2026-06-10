@@ -36,18 +36,18 @@ bp_lib = unreal.BlueprintEditorLibrary
 | Compile Blueprint | YES | `compile_blueprint(bp)` |
 | Save Blueprint | YES | `EditorAssetLibrary.save_asset()` |
 | Spawn BP in level | YES | `EditorActorSubsystem.spawn_actor_from_class()` |
-| Add nodes to graphs | YES | `AgentBridgeLibrary.add_blueprint_node()` |
-| Wire pins between nodes | YES | `AgentBridgeLibrary.connect_blueprint_pins()` |
-| Remove individual nodes | YES | `AgentBridgeLibrary.remove_blueprint_node()` |
-| Get all nodes + pins | YES | `AgentBridgeLibrary.get_blueprint_graph_nodes()` |
-| Get all graphs | YES | `AgentBridgeLibrary.get_all_blueprint_graphs()` |
-| Export nodes (clipboard) | YES | `AgentBridgeLibrary.export_blueprint_nodes()` |
-| Import nodes (clipboard) | YES | `AgentBridgeLibrary.import_blueprint_nodes()` |
-| Add variables (typed) | YES | `AgentBridgeLibrary.add_blueprint_variable()` |
-| Set pin default values | YES | `AgentBridgeLibrary.set_pin_default_value()` |
-| Set variable categories | YES | `AgentBridgeLibrary.set_blueprint_variable_category()` |
-| Set variable defaults | YES | `AgentBridgeLibrary.set_blueprint_variable_default_value()` |
-| Remove individual variables | YES | `AgentBridgeLibrary.remove_blueprint_variable()` |
+| Add nodes to graphs | YES | `RiderAgentBridgeLibrary.add_blueprint_node()` |
+| Wire pins between nodes | YES | `RiderAgentBridgeLibrary.connect_blueprint_pins()` |
+| Remove individual nodes | YES | `RiderAgentBridgeLibrary.remove_blueprint_node()` |
+| Get all nodes + pins | YES | `RiderAgentBridgeLibrary.get_blueprint_graph_nodes()` |
+| Get all graphs | YES | `RiderAgentBridgeLibrary.get_all_blueprint_graphs()` |
+| Export nodes (clipboard) | YES | `RiderAgentBridgeLibrary.export_blueprint_nodes()` |
+| Import nodes (clipboard) | YES | `RiderAgentBridgeLibrary.import_blueprint_nodes()` |
+| Add variables (typed) | YES | `RiderAgentBridgeLibrary.add_blueprint_variable()` |
+| Set pin default values | YES | `RiderAgentBridgeLibrary.set_pin_default_value()` |
+| Set variable categories | YES | `RiderAgentBridgeLibrary.set_blueprint_variable_category()` |
+| Set variable defaults | YES | `RiderAgentBridgeLibrary.set_blueprint_variable_default_value()` |
+| Remove individual variables | YES | `RiderAgentBridgeLibrary.remove_blueprint_variable()` |
 | **Create macro graphs** | **NO** | No `add_macro_graph` method |
 
 #### Graph Operations
@@ -72,15 +72,15 @@ bp_lib = unreal.BlueprintEditorLibrary
 | `remove_unused_variables(bp)` | Remove all unreferenced variables |
 | `replace_variable_references(bp, old_name, new_name)` | Rename variable references across graphs |
 
-**NOT available in BlueprintEditorLibrary** (use AgentBridgeLibrary instead):
-- ~~`add_variable(bp, name, type_str)`~~ — use `AgentBridgeLibrary.add_blueprint_variable()` or `add_member_variable(bp, name, EdGraphPinType)`
-- ~~`remove_variable(bp, name)`~~ — use `AgentBridgeLibrary.remove_blueprint_variable()`
-- ~~`set_blueprint_variable_default_value(bp, name, str)`~~ — use `AgentBridgeLibrary.set_blueprint_variable_default_value()`
-- ~~`set_blueprint_variable_category(bp, name, str)`~~ — use `AgentBridgeLibrary.set_blueprint_variable_category()`
-- ~~`get_all_graphs(bp)`~~ — use `AgentBridgeLibrary.get_all_blueprint_graphs()`
-- ~~`add_node(bp, graph, class, x, y)`~~ — use `AgentBridgeLibrary.add_blueprint_node()`
-- ~~`remove_node(bp, graph, node)`~~ — use `AgentBridgeLibrary.remove_blueprint_node()`
-- ~~`connect_pins(node1, pin1, node2, pin2)`~~ — use `AgentBridgeLibrary.connect_blueprint_pins()`
+**NOT available in BlueprintEditorLibrary** (use RiderAgentBridgeLibrary instead):
+- ~~`add_variable(bp, name, type_str)`~~ — use `RiderAgentBridgeLibrary.add_blueprint_variable()` or `add_member_variable(bp, name, EdGraphPinType)`
+- ~~`remove_variable(bp, name)`~~ — use `RiderAgentBridgeLibrary.remove_blueprint_variable()`
+- ~~`set_blueprint_variable_default_value(bp, name, str)`~~ — use `RiderAgentBridgeLibrary.set_blueprint_variable_default_value()`
+- ~~`set_blueprint_variable_category(bp, name, str)`~~ — use `RiderAgentBridgeLibrary.set_blueprint_variable_category()`
+- ~~`get_all_graphs(bp)`~~ — use `RiderAgentBridgeLibrary.get_all_blueprint_graphs()`
+- ~~`add_node(bp, graph, class, x, y)`~~ — use `RiderAgentBridgeLibrary.add_blueprint_node()`
+- ~~`remove_node(bp, graph, node)`~~ — use `RiderAgentBridgeLibrary.remove_blueprint_node()`
+- ~~`connect_pins(node1, pin1, node2, pin2)`~~ — use `RiderAgentBridgeLibrary.connect_blueprint_pins()`
 - ~~`add_macro_graph(bp, name)`~~ — does not exist
 
 #### Blueprint Introspection
@@ -436,7 +436,7 @@ unreal.BlueprintEditorLibrary.compile_blueprint(bp)
 
 ## AgentBridge Blueprint API
 
-C++ bridge functions exposed to Python as `unreal.AgentBridgeLibrary.*`.
+C++ bridge functions exposed to Python as `unreal.RiderAgentBridgeLibrary.*`.
 These bypass UE 5.7 Python API gaps (protected EdGraphPinType, missing graph APIs).
 
 ### JSON IR Workflow (recommended)
@@ -515,7 +515,7 @@ apply_diff('/Game/BP_Example', 'EventGraph', changes)
 For cases where JSON IR is not suitable (e.g., clipboard copy-paste between BPs):
 
 ```python
-ab = unreal.AgentBridgeLibrary
+ab = unreal.RiderAgentBridgeLibrary
 
 # Graph info
 graphs_json = ab.get_all_blueprint_graphs(bp_path)     # → JSON array

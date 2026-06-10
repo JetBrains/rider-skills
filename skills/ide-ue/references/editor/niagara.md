@@ -17,12 +17,12 @@ The Niagara Python API is **extremely limited**. You CANNOT configure emitter in
 - Activate/deactivate: `component.activate()`, `component.deactivate()`
 - Set component transform (position, rotation, scale)
 
-### AgentBridgeLibrary Niagara Extensions
+### RiderAgentBridgeLibrary Niagara Extensions
 
-The `AgentBridgeLibrary` C++ extension exposes additional Niagara inspection APIs to Python:
+The `RiderAgentBridgeLibrary` C++ extension exposes additional Niagara inspection APIs to Python:
 
-- **Get system parameters**: `unreal.AgentBridgeLibrary.get_niagara_system_parameters('/Game/FX/NS_Fire')` — returns JSON with all user-exposed parameters (name, type, value)
-- **Get emitter info**: `unreal.AgentBridgeLibrary.get_niagara_system_emitters('/Game/FX/NS_Fire')` — returns JSON with emitter names, enabled state, sim target (CPU/GPU), determinism
+- **Get system parameters**: `unreal.RiderAgentBridgeLibrary.get_niagara_system_parameters('/Game/FX/NS_Fire')` — returns JSON with all user-exposed parameters (name, type)
+- **Get emitter info**: `unreal.RiderAgentBridgeLibrary.get_niagara_system_emitters('/Game/FX/NS_Fire')` — returns JSON with emitter names, enabled state, sim target (CPU/GPU), determinism
 - These are also available via REST: `GET /agent/niagara/params?path=...` and `GET /agent/niagara/emitters?path=...`
 
 ### What Python Still CANNOT Do

@@ -135,8 +135,8 @@ def parse_hit_vector(hit_result, field="ImpactPoint"):
     return None
 
 # Forward trace from camera
-cam_loc = unreal.AgentBridgeLibrary.get_viewport_camera_location()
-cam_rot = unreal.AgentBridgeLibrary.get_viewport_camera_rotation()
+cam_loc = unreal.RiderAgentBridgeLibrary.get_viewport_camera_location()
+cam_rot = unreal.RiderAgentBridgeLibrary.get_viewport_camera_rotation()
 fwd = cam_rot.get_forward_vector()
 max_dist = 5000.0
 
@@ -363,16 +363,16 @@ unreal.SystemLibrary.execute_console_command(None, "PlayInEditor.PlayInSelectedV
 unreal.get_editor_subsystem(unreal.LevelEditorSubsystem).editor_request_begin_play()
 ```
 
-## AgentBridgeLibrary availability after restart
-After editor restart, the health endpoint may respond before Python bindings are registered. Retry if `AgentBridgeLibrary` is not found:
+## RiderAgentBridgeLibrary availability after restart
+After editor restart, the health endpoint may respond before Python bindings are registered. Retry if `RiderAgentBridgeLibrary` is not found:
 ```python
 import unreal, time
 for _ in range(5):
-    if hasattr(unreal, 'AgentBridgeLibrary'):
+    if hasattr(unreal, 'RiderAgentBridgeLibrary'):
         break
     time.sleep(1)
 else:
-    raise RuntimeError("AgentBridgeLibrary not available")
+    raise RuntimeError("RiderAgentBridgeLibrary not available")
 ```
 
 ## Safe asset deletion (stop PIE first)
@@ -383,5 +383,5 @@ if sub.is_in_play_in_editor():
     sub.editor_request_end_play()
     time.sleep(0.5)
 # Now safe to delete
-unreal.AgentBridgeLibrary.force_delete_asset("/Game/Path/Asset")
+unreal.RiderAgentBridgeLibrary.force_delete_asset("/Game/Path/Asset")
 ```

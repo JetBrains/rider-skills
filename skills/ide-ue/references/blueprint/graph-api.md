@@ -42,7 +42,7 @@ result = apply_graph_ir('/Game/BP_Target', 'EventGraph', ir, clear_existing=True
 ## Core API — Low-Level AgentBridge
 
 ```python
-ab = unreal.AgentBridgeLibrary
+ab = unreal.RiderAgentBridgeLibrary
 
 # Nodes
 node = ab.add_blueprint_node(bp_path, 'EventGraph', 'K2Node_CallFunction',
@@ -72,7 +72,7 @@ unreal.EditorAssetLibrary.save_asset('/Game/Blueprints/BP_MyActor')
 ## Widget tree manipulation
 
 ```python
-ab = unreal.AgentBridgeLibrary
+ab = unreal.RiderAgentBridgeLibrary
 
 # CRITICAL: Open WBP in editor first to initialize WidgetTree
 unreal.get_editor_subsystem(unreal.AssetEditorSubsystem).open_editor_for_assets([wbp])

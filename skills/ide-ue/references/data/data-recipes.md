@@ -580,7 +580,7 @@ else:
 
 # NOTE: UserDefinedEnum manipulation via Python is limited.
 # For complex enums, create via AgentBridge ensure_asset:
-ab = unreal.AgentBridgeLibrary
+ab = unreal.RiderAgentBridgeLibrary
 enum_asset = ab.ensure_asset(path, name, 'UserDefinedEnum', 'EnumFactory')
 if enum_asset:
     unreal.EditorAssetLibrary.save_asset(full_path)
