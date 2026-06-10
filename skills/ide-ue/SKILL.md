@@ -28,7 +28,7 @@ Assumptions this skill contradicts (representative, not exhaustive — the patte
 - *"I can't change a C++ value mid-run."* → variable hotpatch, `debugger/` domain.
 - *"I can't inspect/spawn/transform actors without the user."* → `ue_*` tools + `ue_execute_python`. `scene/spawn-actor.md`, `python/ue-execute-python.md`.
 - *"I'd have to ask the user to click in the editor / read a log file / run a CLI."* → there is almost always a `ue_*` tool or Python path; never fall back to manual steps when a tool exists.
-- *"I can't copy/paste Blueprint nodes programmatically."* → `ue_export_blueprint_nodes` exports selected (or all) nodes from a graph to UE clipboard text; `ue_import_blueprint_nodes` pastes them into any graph with an optional position offset.
+- *"I can't copy/paste Blueprint nodes programmatically."* → use `ue_execute_python` with `unreal.RiderAgentBridgeLibrary` — `export_blueprint_nodes` serialises a graph to clipboard text; `import_blueprint_nodes` pastes it into any target graph.
 
 ---
 
@@ -50,23 +50,59 @@ The same MCP server backs both UE automation and plain IDE actions — reuse the
 
 These are the only ways to interact with the editor and index — **never** fall back to CLI runners, shell `grep`, log-file tailing, print statements, or "please click in the editor" when a tool exists.
 
-**Live-editor `ue_*` tools** (require the editor connected):
+**Live-editor tools** (require the editor connected):
 
 | Tool | Purpose |
 |------|---------|
-| `ue_health` / `ue_status` | Connection + PIE state. **Call one first, every session.** |
-| `ue_play` | Start/stop/pause/frame-skip PIE; sets mode, players, netMode. |
-| `ue_get_logs` | Stream / fetch editor + PIE logs. |
-| `ue_execute_python` | Run Python on the editor game thread (the workhorse for everything without a dedicated tool). |
-| `ue_export_blueprint_nodes` | Export nodes from a Blueprint graph to UE clipboard text format (`FEdGraphUtilities`). Returns `clipboardText` for pasting into another graph. Prefer over `ue_execute_python` for node copy/paste. |
-| `ue_import_blueprint_nodes` | Import nodes from UE clipboard text into a Blueprint graph with optional X/Y offset. Returns list of imported node names. Prefer over `ue_execute_python` for node copy/paste. |
-| `ue_screenshot` | Capture editor or viewport. |
-| `ue_transform` | Move/rotate/scale an actor. |
-| `ue_overrides` | Inspect/apply sticky PIE override settings. |
+| `ue_health` | Check editor connection. Returns `connected`, `projectName`, `processId`. **Call first, every session.** |
+| `ue_status` | One-shot: health + PIE state + recent logs. Use instead of three separate calls. |
+| `ue_play` | Query or control PIE. `action`: `state`\|`play`\|`pause`\|`resume`\|`stop`\|`frame_skip`. For `play` pass `mode`, `players`, `netMode`, `runUnderOneProcess` explicitly — settings are sticky. |
+| `ue_get_logs` | Query editor log buffer. Filters: `category`, `minVerbosity`, `count`, `sinceTimestampMs`, `pattern`. `follow=true` long-polls until an entry lands. |
+| `ue_execute_python` | Run Python on the editor game thread. `script` (single) or `scripts` (sequential batch with `startFrom` resume). Returns `results[].{success, output, result, error}`. **Always check `LogPython` logs after — Python errors print silently, they do not raise.** |
+| `spawn_actor` | Place a StaticMesh or Blueprint actor on the level. Required: `assetPath` (long object path, e.g. `/Game/BP_Hero.BP_Hero`), `location` `[x,y,z]`. Optional: `rotation` `[pitch,yaw,roll]`, `scale` `[x,y,z]`, `label`. Returns `spawned`, `actorLabel`, `actorName`, `location`. |
+| `simulate_input` | Drive PIE player input. `mode`: `actions` (sequence of move/jump/look/wait objects), `primitive` (`add_movement_input`\|`add_yaw_input`\|`add_pitch_input`\|`jump`), `enhanced` (inject Enhanced Input Action by asset path + valueKind). Requires PIE running with a possessed pawn. |
+| `take_screenshot` | Capture a PNG. `kind`: `editor_window`\|`viewport`\|`asset_preview`. For `asset_preview` pass `assetPath`. Optional `width`/`height` (0 = native). Returns disk `path` — image bytes are NOT returned over MCP; read the file. |
+| `viewport_camera` | Drive the active level-editor camera. `action`: `get`\|`set`\|`move`\|`look_at`\|`focus_on_actor`. Vectors are `[x,y,z]`, rotators `[pitch,yaw,roll]` in degrees. `focus_on_actor` takes actor Outliner label + optional `minDistance`. |
 
-**Index tools** (Rider index — **work with the editor closed**): `search_assets`, `search_tags`, `get_class_hierarchy`, `get_asset_properties`.
+**Index tools** (Rider index — **work with the editor closed**): `search_assets`, `search_tags`, `get_class_hierarchy`, `get_asset_properties`, `find_default_value_overrides`.
 
-**Code/problem tools:** `read_file`, `search_symbol`, `lint_files`, `get_file_problems`, `get_project_problems`, `reformat_file`, and the `xdebug_*` family (see the Debugger domain).
+| Index tool | Key params | Notes |
+|------------|-----------|-------|
+| `search_assets` | `query`, `baseClass`, `packagePath`, `source` (cache\|editor\|auto), `limit` | Find `.uasset`/`.umap` by name or C++ base class |
+| `search_tags` | `prefix`, `limit` | GameplayTag definitions |
+| `get_class_hierarchy` | `baseClass`, `limit` | All BP descendants of a C++ class |
+| `get_asset_properties` | `assetPath` (absolute disk path) | Read CDO UPROPERTY values without opening the editor |
+| `find_default_value_overrides` | `className` (bare C++ name, no U/A prefix), `fieldName`, `limit` | Every BP asset that overrides a specific UPROPERTY |
+
+**Build tools:**
+
+| Build tool | Purpose |
+|------------|---------|
+| `build_solution_start` | Start build (Live Coding hot-reload when editor connected, else UBT). Returns `sessionId`. Optional: `rebuild` (full rebuild), `filesToRebuild` (list of relative paths). |
+| `build_solution_state` | Poll build progress by `sessionId`. Returns `state` (Running\|Completed\|Cancelled\|NotFound), `buildIsSuccess`, `problems[]` with file/line. |
+
+**Code/problem tools:** `read_file`, `apply_patch`, `create_new_file`, `search_file`, `search_regex`, `search_symbol`, `search_text`, `get_symbol_info`, `analyze_calls`, `get_file_problems`, `get_project_problems`, `lint_files`, `reformat_file`, `rename_refactoring`, `open_file_in_editor`, `list_directory_tree`, `execute_terminal_command`, and the `xdebug_*` family (see the Debugger domain).
+
+**Debugger tools** (`xdebug_*` — for C++ UE sessions):
+
+| Debugger tool | Purpose |
+|--------------|---------|
+| `xdebug_attach_to_process` | Attach Rider debugger to a running process by `pid`. `debuggerKind` filter: `"Native"` for UE C++. |
+| `xdebug_start_mixed_mode_debug` | Attach in mixed managed+native mode by `pid`. |
+| `xdebug_start_debugger_session` | Start a new debug session from a run configuration. |
+| `xdebug_control_session` | Step over/into/out, continue, pause, stop. |
+| `xdebug_get_debugger_status` | Check session state. |
+| `xdebug_get_stack` | Current call stack. |
+| `xdebug_get_frame_values` | Variables in a specific frame. |
+| `xdebug_get_threads` | Thread list. |
+| `xdebug_evaluate_expression` | Eval an expression in the current frame. |
+| `xdebug_get_value_by_path` | Navigate nested variable by path. |
+| `xdebug_list_breakpoints` | List all breakpoints. |
+| `xdebug_set_breakpoint` | Set a breakpoint. |
+| `xdebug_remove_breakpoint` | Remove a breakpoint. |
+| `xdebug_run_to_line` | Run to a specific file+line. |
+| `xdebug_set_variable` | Hotpatch a variable value mid-session. |
+| `xdebug_memory_dump` | Load a `.dmp`/`.core` for post-mortem debugging. |
 
 > `get_inspections` and `apply_quick_fix` **do not exist** in this Rider MCP. For problems use `get_file_problems` / `lint_files` / `get_project_problems`; to fix, edit the file directly with the `Edit` tool. If any needed tool is missing, tell the user which MCP module to enable — don't simulate it manually.
 

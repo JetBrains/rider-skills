@@ -121,15 +121,19 @@ see: `../ue-blueprint/knowledge/recipes.md`
 
 ## MCP tools
 
+> **Note:** `ue_export_blueprint_nodes` and `ue_import_blueprint_nodes` do **not** exist as MCP tools in the current Rider server. Use `ue_execute_python` with `unreal.RiderAgentBridgeLibrary` for all BP graph manipulation.
+
 | Tool | Purpose | Scenario |
 |------|---------|----------|
-| `ue_status` | Confirm editor connected | Always check before any Python execution; no connection = no-op |
-| `ue_execute_python` | Run graph-manipulation and asset-creation Python | All Blueprint work: create asset, compile, save, set CDO defaults |
-| `ue_export_blueprint_nodes` | Export nodes from a graph to UE clipboard text | Copy nodes to paste into another graph; pass `nodeNames` to select a subset, omit to export all |
-| `ue_import_blueprint_nodes` | Import nodes from UE clipboard text into a graph | Paste nodes exported by `ue_export_blueprint_nodes`; optional `offsetX`/`offsetY` to reposition |
+| `ue_health` | Check editor connection (`connected`, `projectName`, `processId`) | Call before any Python execution; stop if `connected: false` and follow Scenario 1 |
+| `ue_status` | Health + PIE state + recent logs in one call | Quick pulse check instead of separate ue_health + ue_play(state) + ue_get_logs |
+| `ue_execute_python` | Run graph-manipulation and asset-creation Python | All Blueprint work: create asset, compile, save, add nodes, wire pins, set defaults |
+| `ue_get_logs` | Fetch editor logs by category/verbosity | After every `ue_execute_python` call — check `LogPython` and `LogBlueprint` for silent errors |
 | `search_assets` | Find `.uasset` by name or base class | Locate the BP asset path before `get_asset_properties` or modification |
-| `get_asset_properties` | Read CDO property values from a `.uasset` | Inspect Blueprint defaults without opening the editor |
+| `get_asset_properties` | Read CDO property values from a `.uasset` (absolute path) | Inspect Blueprint defaults without opening the editor |
 | `find_default_value_overrides` | List every BP that overrides a UPROPERTY | Audit which BPs have non-default values for a specific field |
 | `get_class_hierarchy` | All Blueprint descendants of a C++ class | Enumerate all child BPs before a batch CDO update |
+| `spawn_actor` | Place a BP actor in the level (`assetPath` + `location` required) | Drop a test instance of the BP into the current level |
+| `take_screenshot` | Capture PNG of editor/viewport/asset preview | Verify BP result visually; `kind=asset_preview` with `assetPath` for a BP thumbnail |
 | `open_file_in_editor` | Open a file in Rider | Open the C++ parent class for reference while working in the BP |
 | `search_symbol` | Find the C++ class behind a Blueprint | Locate parent class declaration before scripting BP graph nodes |
