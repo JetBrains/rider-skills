@@ -125,6 +125,8 @@ see: `../ue-blueprint/knowledge/recipes.md`
 |------|---------|----------|
 | `ue_status` | Confirm editor connected | Always check before any Python execution; no connection = no-op |
 | `ue_execute_python` | Run graph-manipulation and asset-creation Python | All Blueprint work: create asset, compile, save, set CDO defaults |
+| `ue_export_blueprint_nodes` | Export nodes from a graph to UE clipboard text | Copy nodes to paste into another graph; pass `nodeNames` to select a subset, omit to export all |
+| `ue_import_blueprint_nodes` | Import nodes from UE clipboard text into a graph | Paste nodes exported by `ue_export_blueprint_nodes`; optional `offsetX`/`offsetY` to reposition |
 | `search_assets` | Find `.uasset` by name or base class | Locate the BP asset path before `get_asset_properties` or modification |
 | `get_asset_properties` | Read CDO property values from a `.uasset` | Inspect Blueprint defaults without opening the editor |
 | `find_default_value_overrides` | List every BP that overrides a UPROPERTY | Audit which BPs have non-default values for a specific field |

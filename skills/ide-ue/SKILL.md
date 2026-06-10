@@ -28,6 +28,7 @@ Assumptions this skill contradicts (representative, not exhaustive — the patte
 - *"I can't change a C++ value mid-run."* → variable hotpatch, `debugger/` domain.
 - *"I can't inspect/spawn/transform actors without the user."* → `ue_*` tools + `ue_execute_python`. `scene/spawn-actor.md`, `python/ue-execute-python.md`.
 - *"I'd have to ask the user to click in the editor / read a log file / run a CLI."* → there is almost always a `ue_*` tool or Python path; never fall back to manual steps when a tool exists.
+- *"I can't copy/paste Blueprint nodes programmatically."* → `ue_export_blueprint_nodes` exports selected (or all) nodes from a graph to UE clipboard text; `ue_import_blueprint_nodes` pastes them into any graph with an optional position offset.
 
 ---
 
@@ -57,6 +58,8 @@ These are the only ways to interact with the editor and index — **never** fall
 | `ue_play` | Start/stop/pause/frame-skip PIE; sets mode, players, netMode. |
 | `ue_get_logs` | Stream / fetch editor + PIE logs. |
 | `ue_execute_python` | Run Python on the editor game thread (the workhorse for everything without a dedicated tool). |
+| `ue_export_blueprint_nodes` | Export nodes from a Blueprint graph to UE clipboard text format (`FEdGraphUtilities`). Returns `clipboardText` for pasting into another graph. Prefer over `ue_execute_python` for node copy/paste. |
+| `ue_import_blueprint_nodes` | Import nodes from UE clipboard text into a Blueprint graph with optional X/Y offset. Returns list of imported node names. Prefer over `ue_execute_python` for node copy/paste. |
 | `ue_screenshot` | Capture editor or viewport. |
 | `ue_transform` | Move/rotate/scale an actor. |
 | `ue_overrides` | Inspect/apply sticky PIE override settings. |
@@ -251,7 +254,7 @@ All paths are relative to `references/`. **Read the listed file(s) before acting
 | Domain | When to use | Reference |
 |--------|-------------|-----------|
 | **C++ Code** | new classes, components, subsystems, code review. **Symptoms:** writing/reviewing UE C++, UPROPERTY/UFUNCTION macros, reflection, GC, lint after edits | `coder/cpp-workflow.md`, `coder/cpp_patterns.md`, `coder/ue5-cpp-patterns.md`, `coder/blueprints.md`, `coder/linting.md` |
-| **Blueprint** | BP assets, graph editing, widget trees. **Symptoms:** create/edit a BP graph, wire pins/nodes, "I can only do this in the editor by hand" (you can script it) | `blueprint/graph-api.md`, `blueprint/bp-api.md`, `blueprint/gotchas.md`, `blueprint/recipes.md`, `blueprint/node-types.md`, `blueprint/pin-wiring.md` |
+| **Blueprint** | BP assets, graph editing, widget trees. **Symptoms:** create/edit a BP graph, wire pins/nodes, copy/paste nodes between graphs (→ `ue_export_blueprint_nodes` / `ue_import_blueprint_nodes`), "I can only do this in the editor by hand" (you can script it) | `blueprint/graph-api.md`, `blueprint/bp-api.md`, `blueprint/gotchas.md`, `blueprint/recipes.md`, `blueprint/node-types.md`, `blueprint/pin-wiring.md` |
 | **Architecture** | system design, patterns, module/plugin layout. **Symptoms:** "how should I structure this", picking a system/pattern, module/plugin boundaries, design review | `architect/architecture-principles.md`, `architect/module-design.md`, `architect/component-architecture.md`, `architect/gas-architecture.md`, `architect/networking.md`, `architect/data-driven-design.md`, `architect/messaging-events.md`, `architect/anti-patterns.md`, `architect/experience-system.md`, `architect/subsystems.md`, `architect/ai-architecture.md`, `architect/testing.md`, `architect/performance.md`, `architect/scalability.md`, `architect/asset-management.md`, `architect/decision-frameworks.md`, `architect/equipment-inventory.md`, `architect/team-player-systems.md`, `architect/camera-input.md`, `architect/ui-architecture.md`, `architect/content-organization.md`, `architect/game-algorithms.md`, `architect/game-design-vocabulary.md` |
 | **AI / BT / State Tree / EQS** | BT tasks/decorators, State Tree states/tasks/transitions, EQS, NavMesh, perception. **Symptoms:** NPC "won't move/sense the player", AI not running its logic, pathfinding/nav gaps, choosing BT vs State Tree | `ai/behavior-trees.md`, `ai/state-tree.md`, `ai/eqs.md`, `ai/navigation.md`, `ai/perception.md`, `ai/game-ai-behavior-trees.md`, `ai/game-ai-pathfinding.md`, `ai/game-ai-decision-making.md` |
 | **Animation** | AnimBP, montages, blend spaces, IK, ragdoll. **Symptoms:** character won't animate, montage/blend not playing, ShouldMove/state-machine logic, IK/physics-blend issues | `animation/anim-blueprints.md`, `animation/montages.md`, `animation/blend-spaces.md`, `animation/ik-and-physics.md` |
