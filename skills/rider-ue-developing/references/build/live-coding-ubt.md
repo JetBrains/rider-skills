@@ -67,29 +67,6 @@ RunUAT.bat BuildCookRun -project="<path>.uproject" -targetplatform=Win64 -client
   >> Saved\Logs\UAT_Package.log 2>&1
 ```
 
-### RiderAgentTools commandlet crash (RiderLink ≤ 2026.3.x)
-
-When cooking with the editor running, the cook commandlet crashes on startup with:
-```
-Assertion failed: ModuleManager.IsModuleLoaded(ModuleName)
-Tried to get module interface for unloaded module: 'RiderLink'
-FRiderAgentToolsModule::StartupModule()
-```
-
-**Root cause** — `RiderAgentTools` is declared as `"Type": "Editor"` in `RiderLink.uplugin`, while every other module in the plugin uses `"EditorNoCommandlet"`. The `Editor` type allows loading in commandlets; `EditorNoCommandlet` does not. `RiderAgentTools::StartupModule()` unconditionally calls `IRiderLinkModule::Get()`, which asserts because `RiderLink` itself is correctly excluded from commandlets.
-
-**Fix** — in `Plugins/Developer/RiderLink/RiderLink.uplugin`:
-```json
-{
-    "Name": "RiderAgentTools",
-    "Type": "EditorNoCommandlet",
-    "LoadingPhase": "Default"
-}
-```
-This fix must be applied per-project (the plugin lives in `Plugins/Developer/`). Report to JetBrains if the upstream version ships with `"Type": "Editor"`.
-
----
-
 ## MCP tools
 
 | Tool | Purpose | Scenario |
