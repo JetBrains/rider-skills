@@ -122,19 +122,19 @@ These are the only ways to interact with the editor and index — **never** fall
 
 These three scenarios are **always executed in sequence** when editor automation is needed. Never ask the user to open the editor manually.
 
+---
+
 ### Path variables (resolve once, reuse everywhere)
 
-Before running any scenario, resolve these four variables from the current session context:
-
-| Variable | How to resolve |
-|----------|---------------|
-| `<PROJECT_ROOT>` | The `rootFolder` already known from the session (working directory of the project). |
-| `<PROJECT_NAME>` | Glob `<PROJECT_ROOT>/*.uproject` → filename without `.uproject` extension. |
-| `<PROJECT_UPROJECT>` | `<PROJECT_ROOT>/<PROJECT_NAME>.uproject` |
-| `<UE_VERSION>` | `(Get-Content '<PROJECT_UPROJECT>' \| ConvertFrom-Json).EngineAssociation` → e.g. `"5.4"` |
-| `<UE_ROOT>` | Search common install bases for `UE_<UE_VERSION>`: `C:/Program Files/Epic Games/UE_<UE_VERSION>`, sibling of `<PROJECT_ROOT>` parent, or any drive root. Glob `*/UE_<UE_VERSION>` if unsure. |
-| `<UE_EDITOR_EXE>` | `<UE_ROOT>/Engine/Binaries/Win64/UnrealEditor.exe` (Windows) or `<UE_ROOT>/Engine/Binaries/Mac/UnrealEditor` (Mac) |
-| `<PROJECT_LOG>` | `<PROJECT_ROOT>/Saved/Logs/<PROJECT_NAME>.log` |
+| Variable | MCP tool | How |
+|----------|---------|-----|
+| `<PROJECT_ROOT>` | *(none — already known as `rootFolder`)* | Reuse session value |
+| `<PROJECT_NAME>` | `search_file(q: "*.uproject", rootFolder: <PROJECT_ROOT>)` | Strip `.uproject` from the returned path |
+| `<PROJECT_UPROJECT>` | *(derived)* | `<PROJECT_ROOT>/<PROJECT_NAME>.uproject` |
+| `<UE_VERSION>` | `read_file(file_path: "<PROJECT_UPROJECT>")` | Parse `"EngineAssociation": "X.Y"` from the JSON |
+| `<UE_ROOT>` | `execute_terminal_command(command: "Get-ChildItem D:\,C:\,E:\ -Filter UnrealEditor.exe -Recurse -EA SilentlyContinue | Where FullName -like '*UE_<UE_VERSION>*' | Select -First 1 -Expand FullName")` | Strip `\Engine\Binaries\Win64\UnrealEditor.exe` suffix |
+| `<UE_EDITOR_EXE>` | *(derived)* | `<UE_ROOT>\Engine\Binaries\Win64\UnrealEditor.exe` |
+| `<PROJECT_LOG>` | *(derived)* | `<PROJECT_ROOT>\Saved\Logs\<PROJECT_NAME>.log` |
 
 ---
 
@@ -145,38 +145,46 @@ Before running any scenario, resolve these four variables from the current sessi
 **Never stop here.** Always attempt to launch the editor automatically.
 
 **Step 1 — Check if already running:**
-```bash
-powershell.exe -Command "Get-Process UnrealEditor -ErrorAction SilentlyContinue | Select-Object Id, CPU, WorkingSet"
-# macOS/Linux: pgrep -a UnrealEditor
 ```
-If a process is listed → editor is running but MCP not yet connected (still loading). Skip to Scenario 2.
+execute_terminal_command(
+  command:    "Get-Process UnrealEditor -ErrorAction SilentlyContinue | Select-Object Id",
+  rootFolder: <PROJECT_ROOT>
+)
+```
+Output contains a PID → editor is alive but RiderLink not yet connected (still loading). Skip directly to Scenario 2.  
+Empty output → editor is not running. Continue.
 
-**Step 2 — Resolve `<UE_VERSION>` and `<UE_EDITOR_EXE>`:**
-```bash
-# Windows — read EngineAssociation from .uproject
-powershell.exe -Command "(Get-Content '<PROJECT_UPROJECT>' | ConvertFrom-Json).EngineAssociation"
+**Step 2 — Read UE version:**
+```
+read_file(file_path: "<PROJECT_UPROJECT>")
+```
+Parse the `"EngineAssociation"` field → `<UE_VERSION>`.
 
-# Then find the engine binary (try common locations):
-#   C:/Program Files/Epic Games/UE_<UE_VERSION>/Engine/Binaries/Win64/UnrealEditor.exe
-#   <any_drive>/EpicGames/UE_<UE_VERSION>/Engine/Binaries/Win64/UnrealEditor.exe
-# Glob fallback:
-powershell.exe -Command "Get-ChildItem -Path 'C:/','D:/','E:/' -Filter 'UnrealEditor.exe' -Recurse -ErrorAction SilentlyContinue | Where-Object { \$_.FullName -like '*UE_<UE_VERSION>*' } | Select-Object -First 1 -ExpandProperty FullName"
+**Step 3 — Locate UnrealEditor.exe (try fast path first):**
+```
+execute_terminal_command(
+  command:    "Test-Path 'D:\EpicGames\UE_<UE_VERSION>\Engine\Binaries\Win64\UnrealEditor.exe'",
+  rootFolder: <PROJECT_ROOT>
+)
+```
+Returns `True` → use that as `<UE_EDITOR_EXE>`. Otherwise search all drives:
+```
+execute_terminal_command(
+  command:    "Get-ChildItem D:\,C:\,E:\ -Filter UnrealEditor.exe -Recurse -EA SilentlyContinue | Where-Object { $_.FullName -like '*UE_<UE_VERSION>*' } | Select-Object -First 1 -ExpandProperty FullName",
+  rootFolder: <PROJECT_ROOT>
+)
 ```
 
-**Step 3 — Launch:**
-```bash
-# Windows
-powershell.exe -Command "Start-Process '<UE_EDITOR_EXE>' -ArgumentList '<PROJECT_UPROJECT>' -WindowStyle Normal"
-
-# macOS/Linux
-open -a '<UE_EDITOR_EXE>' --args '<PROJECT_UPROJECT>'
-# or: '<UE_EDITOR_EXE>' '<PROJECT_UPROJECT>' &
+**Step 4 — Launch:**
 ```
-Empty output = success. Proceed immediately to Scenario 2.
+execute_terminal_command(
+  command:    "Start-Process '<UE_EDITOR_EXE>' -ArgumentList '<PROJECT_UPROJECT>' -WindowStyle Normal",
+  rootFolder: <PROJECT_ROOT>
+)
+```
+Proceed immediately to Scenario 2.
 
-**Step 4 — Immediately proceed to Scenario 2 (connection polling).**
-
-> **Prerequisite:** Rider IDE must be open with this project loaded and the RiderLink plugin enabled (`Edit → Plugins → RiderLink`). The MCP connection routes through Rider — the editor process alone is not enough.
+> **Prerequisite:** Rider IDE must be open with this project loaded and RiderLink enabled (`Edit → Plugins → RiderLink`). The MCP connection routes through Rider — the editor process alone is not enough.
 
 ---
 
@@ -184,38 +192,34 @@ Empty output = success. Proceed immediately to Scenario 2.
 
 **Trigger:** After launching the editor, or after any `ue_health` → `connected: false`.
 
-**Rule:** Never declare "editor not connected" and stop. Always poll with Monitor + direct MCP checks.
+**Rule:** Never declare "editor not connected" and stop. Poll `ue_health` up to 12 times. Use `ue_get_logs(follow: true)` as a server-side 15-second wait between polls — it blocks until a log entry arrives or `followTimeoutMs` elapses, so no shell sleep is needed.
 
-**Step 1 — Arm a Monitor (polls every 15 s, 3-minute window):**
-```bash
-for i in $(seq 1 12); do
-  sleep 15
-  result=$(powershell.exe -Command "& {
-    Add-Type -AssemblyName System.Net.Http
-    \$c = New-Object System.Net.Http.HttpClient
-    try {
-      \$r = \$c.GetAsync('http://localhost:8080/agent/health').Result
-      if (\$r.IsSuccessStatusCode) { echo 'CONNECTED' } else { echo \"HTTP_\$(\$r.StatusCode)\" }
-    } catch { echo 'NOT_READY' }
-  }" 2>/dev/null)
-  echo "Attempt $i: $result"
-  if echo "$result" | grep -q "CONNECTED"; then break; fi
-done
+**Polling loop (up to 12 iterations):**
+
+1. Wait by long-polling logs:
 ```
-
-**Step 2 — On each Monitor notification, also call the MCP tool directly:**
+ue_get_logs(rootFolder: <PROJECT_ROOT>, follow: true, followTimeoutMs: 15000)
 ```
-ue_health  (rootFolder: <PROJECT_ROOT>)
+2. Check connection:
 ```
-The MCP tool is authoritative — use its `connected` field to confirm before proceeding.
+ue_health(rootFolder: <PROJECT_ROOT>)
+```
+3. `connected: true` → proceed to Scenario 3.  
+4. Otherwise repeat from step 1.
 
-**Step 3 — When `connected: true`, proceed to Scenario 3, then run the original task.**
-
-**Timeout handling:** If 12 attempts (~3 min) elapse without connection:
-1. Confirm Rider is open and the project solution is loaded.
-2. Confirm RiderLink plugin is enabled in the editor (`Edit → Plugins → RiderLink`).
-3. Check for crash: if `Get-Process UnrealEditor` returns nothing, the editor crashed — check `<PROJECT_LOG>` for the cause.
-4. Re-run Scenario 1 (relaunch) if the process is gone.
+**Timeout (12 attempts, ~3 min, still not connected) — check whether the editor is still alive:**
+```
+execute_terminal_command(
+  command:    "Get-Process UnrealEditor -ErrorAction SilentlyContinue | Select-Object Id",
+  rootFolder: <PROJECT_ROOT>
+)
+```
+- **Empty output (process dead)** → editor crashed. Read the log tail:
+  ```
+  read_file(file_path: "<PROJECT_LOG>", offset: -200)
+  ```
+  Diagnose, fix, then re-run Scenario 1.
+- **Process still alive** → RiderLink is not connecting. Tell the user to verify Rider is open, the solution is loaded, and RiderLink is enabled (`Edit → Plugins → RiderLink`).
 
 ---
 
@@ -223,23 +227,29 @@ The MCP tool is authoritative — use its `connected` field to confirm before pr
 
 **Trigger:** Immediately after connecting. Also after any suspected error or silent failure.
 
-**Step 1 — Fetch recent logs via MCP (preferred, always available when connected):**
+**Step 1 — Snapshot recent warnings/errors after connecting:**
 ```
-ue_get_logs  (rootFolder: <PROJECT_ROOT>, severity: warning, lines: 50)
+ue_get_logs(rootFolder: <PROJECT_ROOT>, minVerbosity: "Warning", count: 50)
 ```
-Look for errors in: `LogPython`, `LogBlueprint`, `LogUObjectGlobals`, `LogInit`.
+Look for errors in: `LogPython`, `LogBlueprint`, `LogUObjectGlobals`, `LogInit`, `LogRiderLink`.
 
-**Step 2 — For persistent streaming (long operations, PIE sessions), arm a Monitor:**
-```bash
-tail -f "<PROJECT_LOG>" \
-  | grep -E --line-buffered "Error|Warning|LogPython|LogBlueprint|PIE|Crash|Fatal"
+**Step 2 — After every `ue_execute_python` call, check Python and Blueprint logs (mandatory):**
 ```
+ue_get_logs(rootFolder: <PROJECT_ROOT>, category: "LogPython",    count: 20)
+ue_get_logs(rootFolder: <PROJECT_ROOT>, category: "LogBlueprint", count: 20)
+```
+Python errors in UE **do not raise exceptions** — they print silently and execution continues. Always check.
 
-**Step 3 — After every `ue_execute_python` call, fetch Python logs:**
+**Step 3 — Long-poll during PIE sessions or long operations (replaces `tail -f`):**
 ```
-ue_get_logs  (rootFolder: <PROJECT_ROOT>, filter: "LogPython", lines: 20)
+ue_get_logs(
+  rootFolder:      <PROJECT_ROOT>,
+  follow:          true,
+  followTimeoutMs: 30000,
+  pattern:         "Error|Warning|Fatal|Crash|PIE"
+)
 ```
-Python errors in UE **do not raise exceptions** — they print to log and execution continues silently. Always check logs after Python calls.
+Call in a loop. After each return, pass the `timestampMs` of the last received entry as `sinceTimestampMs` on the next call to avoid duplicates.
 
 **Key log categories:**
 | Category | Significance |
@@ -290,7 +300,7 @@ All paths are relative to `references/`. **Read the listed file(s) before acting
 | Domain | When to use | Reference |
 |--------|-------------|-----------|
 | **C++ Code** | new classes, components, subsystems, code review. **Symptoms:** writing/reviewing UE C++, UPROPERTY/UFUNCTION macros, reflection, GC, lint after edits | `coder/cpp-workflow.md`, `coder/cpp_patterns.md`, `coder/ue5-cpp-patterns.md`, `coder/blueprints.md`, `coder/linting.md` |
-| **Blueprint** | BP assets, graph editing, widget trees. **Symptoms:** create/edit a BP graph, wire pins/nodes, copy/paste nodes between graphs (→ `ue_export_blueprint_nodes` / `ue_import_blueprint_nodes`), "I can only do this in the editor by hand" (you can script it) | `blueprint/graph-api.md`, `blueprint/bp-api.md`, `blueprint/gotchas.md`, `blueprint/recipes.md`, `blueprint/node-types.md`, `blueprint/pin-wiring.md` |
+| **Blueprint** | BP assets, graph editing, widget trees. **Symptoms:** create/edit a BP graph, wire pins/nodes, copy/paste nodes between graphs (→ `ue_execute_python` + `RiderAgentBridgeLibrary`), "I can only do this in the editor by hand" (you can script it) | `blueprint/graph-api.md`, `blueprint/bp-api.md`, `blueprint/gotchas.md`, `blueprint/recipes.md`, `blueprint/node-types.md`, `blueprint/pin-wiring.md` |
 | **Architecture** | system design, patterns, module/plugin layout. **Symptoms:** "how should I structure this", picking a system/pattern, module/plugin boundaries, design review | `architect/architecture-principles.md`, `architect/module-design.md`, `architect/component-architecture.md`, `architect/gas-architecture.md`, `architect/networking.md`, `architect/data-driven-design.md`, `architect/messaging-events.md`, `architect/anti-patterns.md`, `architect/experience-system.md`, `architect/subsystems.md`, `architect/ai-architecture.md`, `architect/testing.md`, `architect/performance.md`, `architect/scalability.md`, `architect/asset-management.md`, `architect/decision-frameworks.md`, `architect/equipment-inventory.md`, `architect/team-player-systems.md`, `architect/camera-input.md`, `architect/ui-architecture.md`, `architect/content-organization.md`, `architect/game-algorithms.md`, `architect/game-design-vocabulary.md` |
 | **AI / BT / State Tree / EQS** | BT tasks/decorators, State Tree states/tasks/transitions, EQS, NavMesh, perception. **Symptoms:** NPC "won't move/sense the player", AI not running its logic, pathfinding/nav gaps, choosing BT vs State Tree | `ai/behavior-trees.md`, `ai/state-tree.md`, `ai/eqs.md`, `ai/navigation.md`, `ai/perception.md`, `ai/game-ai-behavior-trees.md`, `ai/game-ai-pathfinding.md`, `ai/game-ai-decision-making.md` |
 | **Animation** | AnimBP, montages, blend spaces, IK, ragdoll. **Symptoms:** character won't animate, montage/blend not playing, ShouldMove/state-machine logic, IK/physics-blend issues | `animation/anim-blueprints.md`, `animation/montages.md`, `animation/blend-spaces.md`, `animation/ik-and-physics.md` |
