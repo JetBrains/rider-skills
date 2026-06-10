@@ -1,4 +1,4 @@
-# ide-ue:python — Editor Python Execution
+# rider-ue-developing:python — Editor Python Execution
 
 Single tool: `ue_execute_python`. Runs Python on the editor game thread. Requires `ue_health.connected = true`.
 

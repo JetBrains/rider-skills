@@ -35,14 +35,14 @@ Before building, detect **what changed** to pick the right pipeline.
 - Local variable additions
 - New `#include` in `.cpp` (if the header doesn't change class layout)
 - Logging / debug output changes
+- **Brand-new `UCLASS`/`USTRUCT`/`UENUM` in new files** — they compile and register into the running editor, immediately usable as a Blueprint parent / spawnable / in the class picker with **no restart**
+- Adding a new `UPROPERTY`/`UFUNCTION` to an existing type — patches in (Live Coding emits a *"data type changes may cause packaging to fail"* warning, harmless for in-editor iteration)
 
 ### What Live Coding May Struggle With (escalate only on failure)
 
 The following changes may cause Live Coding issues. **Always try Live Coding first** — only escalate to Full UBT + Restart if it crashes:
 
-- Changes to `.h` files that alter class layout (size, vtable, CDO)
-- Adding/removing `UPROPERTY`, `UFUNCTION`, `USTRUCT`, `UCLASS`, `UENUM`
-- Adding/removing/renaming `.h` or `.cpp` files
+- Relayout of an *existing* reflected type that has live instances: changing its parent class, removing/reordering an existing `UPROPERTY`, or changing an existing reflected method signature (size / vtable / CDO mismatch)
 - Changing constructor logic (CDO is already baked)
 - Changing `Build.cs` module dependencies
 - Changing `.uplugin` module descriptors or loading phases

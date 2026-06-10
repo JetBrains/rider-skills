@@ -1,4 +1,4 @@
-# ide-ue:debugger — Rider MCP Debug Tools
+# rider-ue-developing:debugger — Rider MCP Debug Tools
 
 Use these tools when the UE5 editor or game is running in **Debug Editor** (or any debug-attached process). They drive the Rider C++ debugger — breakpoints, stepping, variable inspection — without leaving the chat.
 

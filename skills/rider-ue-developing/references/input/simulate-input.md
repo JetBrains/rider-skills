@@ -1,4 +1,4 @@
-# ide-ue:input — Simulate Player Input in PIE
+# rider-ue-developing:input — Simulate Player Input in PIE
 
 `simulate_input` drives the **player pawn / controller in the active PIE world**. Three modes; one tool. Requires PIE running (`ue_status.playState == "Play"`).
 

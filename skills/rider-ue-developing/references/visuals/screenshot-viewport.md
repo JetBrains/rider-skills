@@ -1,4 +1,4 @@
-# ide-ue:visuals — Screenshots & Viewport Camera
+# rider-ue-developing:visuals — Screenshots & Viewport Camera
 
 Requires editor connected (`ue_health.connected = true`).
 

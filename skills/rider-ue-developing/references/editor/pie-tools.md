@@ -1,4 +1,4 @@
-# ide-ue:editor — Editor Lifecycle, PIE, Log Streaming
+# rider-ue-developing:editor — Editor Lifecycle, PIE, Log Streaming
 
 ## Tool reference
 

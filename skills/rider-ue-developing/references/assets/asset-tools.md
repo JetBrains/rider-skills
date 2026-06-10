@@ -1,4 +1,4 @@
-# ide-ue:assets — Asset & Tag Index
+# rider-ue-developing:assets — Asset & Tag Index
 
 These tools run against **Rider's project index**, not the running editor. Use them even when `ue_health` reports `connected = false`.
 

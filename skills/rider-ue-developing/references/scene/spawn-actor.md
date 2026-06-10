@@ -1,4 +1,4 @@
-# ide-ue:scene — Placing Actors on the Level-Editor Scene
+# rider-ue-developing:scene — Placing Actors on the Level-Editor Scene
 
 `spawn_actor` places / creates an object on the **active design-time level** from an asset. Editor-only — not the PIE world. For runtime spawning during play, use `ue_execute_python`.
 
