@@ -157,7 +157,7 @@ All paths are relative to `references/`. **Read the listed folder's file(s) befo
 | Domain | Trigger / symptoms | `references/` |
 |--------|--------------------|---------------|
 | **Pipelines** | multi-step recipe (spawn → play → input → screenshot → verify); follow a proven flow | `pipelines/p1-p10.md` |
-| **Editor / PIE / Logs** | play/pause/stop, log streaming, editor scripting, "nothing happens on Play" | `editor/` |
+| **Editor / PIE / Logs** | play/pause/stop, log streaming, editor scripting, "nothing happens on Play" | `editor/` — see the strict file index below |
 | **Visuals** | screenshot, drive viewport camera, "I can't see what's on screen" | `visuals/`, `editor/viewport-camera.md` |
 | **Scene** | place/move/delete an actor without asking the user | `scene/` |
 | **Input** | pawn won't move in PIE, Enhanced Input, mapping contexts, press keys/axes | `input/` |
@@ -171,7 +171,7 @@ All paths are relative to `references/`. **Read the listed folder's file(s) befo
 | **Animation** | AnimBP, montages, blend spaces, IK, ragdoll, ShouldMove/state machine | `animation/` |
 | **GAS** | ability won't activate, attribute/effect not applying, damage pipeline | `gas/` |
 | **GameplayCues** | VFX/SFX not firing on ability/hit, cue not triggering/replicating | `cue/` |
-| **Networking** | "works on server not client", value won't replicate, RPC, authority, desync | `networking/` |
+| **Networking** | "works on server not client", value won't replicate, RPC, authority, desync; **verify/test replication in PIE, or a GAS prediction-key ensure on a predicted ability** → `networking/replication-testing-pie.md` | `networking/` |
 | **Physics** | trace/overlap returns nothing, clipping, ragdoll/constraint, collision channels | `physics/` |
 | **Graphics / Rendering** | artifacts, lighting/shadow wrong, low GPU fps, Nanite/Lumen/TSR, RDG, shaders | `graphics/` |
 | **Materials** | material graph wrong, shader effect, instance/param, UV/texture | `material/` |
@@ -179,7 +179,7 @@ All paths are relative to `references/`. **Read the listed folder's file(s) befo
 | **Data** | DataTables, DataAssets, Asset Manager, CurveTables | `data/` |
 | **PCG** | procedural graph, scatter/biome, custom node, PCG performance | `pcg/` |
 | **Cinematics** | Sequencer, camera cuts, Movie Render Queue | `cinematics/` |
-| **Debugger** | crash/assert, step/inspect a live value, hotpatch a variable mid-run | `debugger/` |
+| **Debugger** | crash/assert, step/inspect a live value, hotpatch a variable mid-run; **runtime console commands** (`stat`/`show`/`log`/`obj`/`net`/Insights) → `debugger/console-commands.md` | `debugger/` |
 | **Platform / Packaging** | packaging/cook fails, INI/config, deploy to device, platform settings | `platform/` |
 | **Plugin** | new plugin scaffolding, module won't load, `.uplugin`/dependency setup | `plugin/` |
 | **Profiler** | "the game is slow", hitches, CPU/GPU/memory bottleneck, Unreal Insights | `profiler/` |
@@ -187,3 +187,40 @@ All paths are relative to `references/`. **Read the listed folder's file(s) befo
 | **UI (UMG)** | widget won't show/update, menu/HUD layout, focus/navigation | `ui/` |
 | **UI C++** | C++ widget class, BindWidget, MVVM ViewModel wiring | `ui-cpp/` |
 | **Console / UE Python API** | a console command/cvar, per-module Python API lookup | `console/` |
+
+### Editor domain — strict file index (`references/editor/`)
+
+The **Editor / PIE / Logs** row above resolves to these files. Open the specific one for the task — do not guess from the folder name:
+
+| File | Read it for |
+|------|-------------|
+| `editor/pie-tools.md` | `ue_play`/`ue_status`/`ue_get_logs` contracts, PIE play modes, network topology quick-pick, log-streaming + the background-monitor (P9) — **the PIE/log workhorse** |
+| `editor/recipes.md` | Python editor recipes via `ue_execute_python`: coordinate system & FRotator order, `find_look_at_rotation` camera, screenshot protocol, line traces / HitResult parsing, spawning, fog/sky/post-process gotchas, Asset Registry search, Blueprint class (`_C`) access, non-deprecated level save |
+| `editor/viewport-camera.md` | drive the **design-time** level viewport via `viewport_camera` (`get`/`set`/`move`/`look_at`/`focus_on_actor`); spawn-and-frame loop. Does **not** move the PIE camera |
+| `editor/world-partition-operations.md` | load/pin World Partition regions, query `get_actor_descs()` without loading, ActorDesc fields, "Not Loaded Region(s)" |
+| `editor/niagara.md` | Niagara Python API **limits** — what Python can/can't do; reuse-existing vs place-and-tell-user; properties that crash |
+| `editor/docs_python_scripting.md` | Python environment, execution methods, `set_editor_property` vs direct access, transactions, slow-task progress, logging |
+| `editor/docs_editor_utilities.md` | Editor Utility Widgets/Blueprints, Scripted Actions, Call-in-Editor, startup objects |
+| `editor/docs_subsystems.md` | subsystem types (Engine/Editor/GameInstance/LocalPlayer), lifecycle, access patterns, authoring a custom subsystem |
+| `editor/docs_remote_control.md` | Remote Control HTTP (`:30010`) / WebSocket (`:30020`) API, object-path format, presets |
+| `editor/docs_scriptable_tools.md` | Scriptable Tools framework — custom interactive editor tools without C++ |
+
+### Console commands — runtime debug & profile lever (`debugger/console-commands.md`)
+
+Console commands inspect and profile a **running** editor/PIE with no rebuild — the fastest diagnostic loop. Run any of them through `ue_execute_python`:
+
+```
+ue_execute_python(script='import unreal; unreal.SystemLibrary.execute_console_command(None, "stat unit")')
+```
+
+Then read the result the right way: **overlay** commands (`stat`, `show`, `viewmode`, `ShowDebug`) draw in the viewport → verify with `take_screenshot(kind:"viewport")`; **text** commands (`obj list`, `memreport`, `stat dump*`) print to the log → read with `ue_get_logs`. Open `debugger/console-commands.md` for the full catalog; high-value entry points:
+
+| Goal | Command(s) |
+|------|-----------|
+| Frame timing (**start here**) | `stat unit` · `stat unitgraph` · `stat fps` |
+| Subsystem cost | `stat game` · `stat gpu` · `stat scenerendering` · `stat rhi` · `stat ai` · `stat anim` |
+| Visual debug overlays | `show collision` · `show navigation` · `ShowDebug AI\|ABILITYSYSTEM\|NET\|MOVEMENT` |
+| Runtime log verbosity | `log <Category> <Verbose\|Warning\|off>` (e.g. `log LogNet Verbose`) |
+| UObject / GC / leaks | `obj list class=…` · `obj gc` · `obj mark` → `obj markcheck` · `obj refs name=…` |
+| Network emulation | `net PktLag=100 PktLoss=5` (reset: `net PktLag=0 PktLoss=0`) |
+| Profiling capture | `stat startfile`/`stat stopfile`; `Trace.Start cpu,gpu,frame`/`Trace.Stop` (Unreal Insights) |

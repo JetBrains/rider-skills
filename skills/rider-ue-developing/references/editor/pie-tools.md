@@ -49,6 +49,20 @@
 
 ## Network topology — quick-pick
 
+```mermaid
+flowchart TD
+  A[What are you testing?] --> B{Networking involved?}
+  B -->|"No (anim, ability, UI, AI)"| S["netMode:standalone<br/>removes replication noise"]
+  B -->|Yes| C{Need a server?}
+  C -->|"Two POVs, no replication"| M["mode:floating, players:2,<br/>netMode:standalone"]
+  C -->|Listen server + clients| L["mode:floating, players:N+1,<br/>netMode:listen, runUnderOneProcess:true,<br/>spawnAtPlayerStart:true — server is window #1"]
+  C -->|Dedicated server topology| DS["players:N, netMode:client,<br/>dedicatedServer:true, runUnderOneProcess:true"]
+  L --> V[verify handshake chart]
+  DS --> V
+```
+
+Start at the **simplest** shape that reproduces the bug (listen-server before dedicated; one process before `runUnderOneProcess=false`). Scale up only once client/server confidence is high — separate processes and dedicated servers add GC/audio/IPC noise that masks gameplay logic bugs.
+
 | Scenario | Call | Notes |
 |----------|------|-------|
 | Single-player / AI sandbox | `ue_play(action="play", mode="viewport")` | Default `standalone` is correct; don't touch `netMode` |
@@ -59,15 +73,18 @@
 | Separate OS processes | any network shape + `runUnderOneProcess=false` | Slower; separate per-process logs; real socket marshalling |
 | Standalone game process | `ue_play(action="play", mode="standalone")` | Heavy iteration; verifies shipping-config issues |
 
-### Best practice: testing client/server logic
+### Verify the handshake
 
-1. **Default to `mode="floating", netMode="listen", players=2, runUnderOneProcess=true, spawnAtPlayerStart=true`** — server in window #1 (`[NetMode: ListenServer N]`), client in window #2 (`[NetMode: Client N]`).
-2. **Verify the handshake actually happened** before drawing gameplay conclusions — pull `LogNet` and require BOTH:
-   - Server: `IpNetDriver listening on port 17777` + `AddClientConnection: Added client connection … IsServer: YES`
-   - Client: `Browse: 127.0.0.1:17777/<Map>` + `UPendingNetGame::SendInitialJoin: Sending hello.`
-3. **Scale up to dedicated server only after client/server confidence is high.** `dedicatedServer=true` adds a third process/world; debug in the simpler listen-server topology first.
-4. **Use `runUnderOneProcess=false` only for symptom-specific checks** — separate-process testing reveals GC / audio / IPC issues that mask gameplay logic bugs.
-5. **For non-network gameplay (animations, abilities, UI, AI) do not enable networking** — `netMode="standalone"` removes replication noise.
+Before drawing any gameplay conclusion from a networked play, confirm the connection actually formed — require **both** the server and client lines:
+
+```mermaid
+flowchart TD
+  A["ue_get_logs(category:LogNet, sinceTimestampMs:t0,<br/>pattern: listening on port OR AddClientConnection<br/>OR SendInitialJoin OR Browse:)"] --> B{Server lines?}
+  B -->|no| X[server never started networking<br/>recheck netMode / topology]
+  B -->|"listening on port 17777<br/>+ AddClientConnection ... IsServer: YES"| C{Client lines?}
+  C -->|"Browse: 127.0.0.1:17777/&lt;Map&gt;<br/>+ SendInitialJoin: Sending hello."| OK([Handshake confirmed])
+  C -->|"Browse has no ?listen suffix"| G[game UGameInstance overrides the PIE URL<br/>see the gotcha in Critical rules below]
+```
 
 ## `ue_get_logs` filters
 
@@ -83,21 +100,30 @@
 
 ## Standard PIE workflow
 
-1. `ue_status` — confirm `connected = true`.
-2. Check `playState` (already in `ue_status` result).
-3. `ue_play(action="play", mode="floating", players=1, netMode="standalone", runUnderOneProcess=true)` — **always pass all four params explicitly**.
-4. Sleep 5–10 s; re-pulse `ue_status`; require `playState == "Play"`.
-5. For networked plays: grep `LogNet` for `"IpNetDriver listening on port"` (server) and `"SendInitialJoin"` (client) — ini showing `PIE_ListenServer` is necessary but not sufficient.
-6. Stream logs: `t0 = now_ms()` before the play call; loop `ue_get_logs(sinceTimestampMs=cutoff, follow=true, followTimeoutMs=8000)`; advance `cutoff = entries[-1].timestampMs + 1`.
-7. `ue_play(action="stop")` to tear down all PIE worlds.
+```mermaid
+flowchart TD
+  A[ue_status] --> B{connected?}
+  B -->|no| C[run the skill's Connect flow first]
+  B -->|yes| D["ue_play(action:play, mode:floating, players:1,<br/>netMode:standalone, runUnderOneProcess:true)<br/>always pass all four explicitly — settings are sticky"]
+  D --> E[wait 5-10s, then ue_status]
+  E --> F{playState == Play?}
+  F -->|no| G["ue_get_logs(minVerbosity:Error, pattern:PIE) → diagnose"]
+  F -->|yes| H{networked play?}
+  H -->|yes| I[verify handshake — see client/server chart]
+  H -->|no| J[stream logs / observe — see log-stream chart]
+  I --> J
+  J --> K["ue_play(action:stop) — tears down ALL PIE worlds"]
+```
 
-## `mcp__rider__execute_tool` CLI gotchas
+`ue_play(action="play")` returns the **pre-fire** snapshot — never trust it; always re-query `ue_status` after the wait. For networked plays, an ini showing `PIE_ListenServer` is necessary but **not** sufficient — require the `LogNet` handshake lines (next section).
 
-When calling via `mcp__rider__execute_tool --command "ue_play ..."`:
+## `ue_play` parameter requirements
 
-- `--action play` is **required** — omitting it raises `Missing required parameters: action`.
-- `--netMode` takes **string aliases only** (`standalone`, `listen`, `client`). Integer form (e.g. `0`) raises `Unknown netMode '0'`.
-- Minimal working call: `ue_play --action play --mode viewport --players 1 --netMode standalone --runUnderOneProcess true`
+Call `ue_play` directly as an MCP tool (not through a terminal):
+
+- **`action` is required** — omitting it raises `Missing required parameters: action`.
+- **`netMode` takes string aliases only** (`standalone`, `listen`, `client`). Integer form (e.g. `0`) raises `Unknown netMode '0'`.
+- Minimal working call: `ue_play(action:"play", mode:"viewport", players:1, netMode:"standalone", runUnderOneProcess:true)`.
 
 ## Critical rules
 
@@ -106,16 +132,27 @@ When calling via `mcp__rider__execute_tool --command "ue_play ..."`:
 - **`ue_play(action="play")` returns the pre-fire snapshot.** Wait and re-query to confirm PIE started.
 - **`frame_skip` is a no-op during `Play`.** Only valid while paused.
 - **`stop` is global** — tears down every PIE world, not just the most recent.
+- **`build_solution_state` false negative with Live Coding.** When the editor is connected and Live Coding is active, `build_solution_state` may return `buildIsSuccess:false` with an empty `problems[]` array and the message "Build failed without diagnostic output" even for a successful patch. This is a tool false negative — not a real failure. Always confirm the true build result by reading `ue_get_logs(category:"LogLiveCoding")` and looking for `"Live coding succeeded"` or `"Live coding failed"`. The `build_solution_state` result is reliable only for UBT builds (editor not connected / not running).
 - **Python level-building requires PIE stopped.** During `playState == "Play"`, `EditorActorSubsystem.spawn_actor_from_object`, `EditorAssetLibrary.load_asset`, and `UnrealEditorSubsystem.get_editor_world()` all return `None` silently. Always `ue_play(action="stop")`, wait ~6–7 s, then script. Also: editor-spawned actors are unsaved and vanish on map reload or PIE restart — save the level immediately after building.
   - Fallback when `load_asset('/Engine/BasicShapes/Cube.Cube')` returns `None` (right after map reload): `unreal.AssetRegistryHelpers.get_asset_registry().get_assets_by_package_name(unreal.Name('/Engine/BasicShapes/Cube'))[0].get_asset()`
-- **Game-project `UGameInstance` override gotcha:** Some games (e.g. Lyra) build their own `Browse()` URL and bypass standard PIE listen-server plumbing. Symptom: `EditorPerProjectUserSettings.ini` shows `PIE_ListenServer` but runtime logs show `Browse: …?Experience=…` with **no `?listen` suffix** — both windows end up standalone. The MCP layer is doing its job; the game's `UGameInstance` is building its own URL. Diagnose:
-  ```bash
-  grep -E "PlayNetMode|RunUnderOneProcess|PlayNumberOfClients|LastExecutedPlayModeType" \
-    <UProject>/Saved/Config/<Platform>Editor/EditorPerProjectUserSettings.ini
-  ```
-  If the ini shows the right values but PIE still runs standalone, fix on the game's side: pick a map that respects standard PIE URL routing (in Lyra, `L_LyraFrontEnd` does), or temporarily disable the custom `UGameInstance` route.
+- **Game-project `UGameInstance` override gotcha:** Some games (e.g. Lyra) build their own `Browse()` URL and bypass standard PIE listen-server plumbing. Symptom: `EditorPerProjectUserSettings.ini` shows `PIE_ListenServer` but runtime logs show `Browse: …?Experience=…` with **no `?listen` suffix** — both windows end up standalone. The MCP layer is doing its job; the game's `UGameInstance` is building its own URL. To diagnose, `read_file(file_path: "<UProject>/Saved/Config/<Platform>Editor/EditorPerProjectUserSettings.ini")` and check `PlayNetMode`, `RunUnderOneProcess`, `PlayNumberOfClients`, `LastExecutedPlayModeType`. If the ini shows the right values but PIE still runs standalone, fix on the game's side: pick a map that respects standard PIE URL routing (in Lyra, `L_LyraFrontEnd` does), or temporarily disable the custom `UGameInstance` route.
 
 ## Log streaming recipes
+
+Dedup-cursor loop — stream new entries without re-reading what you've seen:
+
+```mermaid
+flowchart TD
+  A["cutoff = t0 (capture before the play call)"] --> B["ue_get_logs(sinceTimestampMs:cutoff,<br/>pattern:..., follow:true, followTimeoutMs:6000)"]
+  B --> C{entries returned?}
+  C -->|yes| D[handle entries<br/>cutoff = last entry timestampMs + 1]
+  C -->|no, timed out| E{keep watching?}
+  D --> E
+  E -->|yes| B
+  E -->|no| F([done])
+```
+
+For an unattended multi-turn watch, run this loop with the **Monitor** tool instead (see Background log monitor below) rather than polling by hand. Concrete one-shot examples:
 
 ```text
 # "Did my play land?"
@@ -151,7 +188,7 @@ ue_get_logs(minVerbosity="Error",
             follow=true, followTimeoutMs=60000)
 ```
 
-## P9 — Background log monitor (persistent)
+## Background log monitor (persistent)
 
 Arm a `Monitor` that long-polls `ue_get_logs` and surfaces Warning+ entries to chat whenever driving the editor over multiple turns.
 

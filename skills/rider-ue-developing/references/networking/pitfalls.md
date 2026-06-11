@@ -152,3 +152,27 @@ When networking isn't working, check in this order:
 6. RPC called from correct side? (Server RPC from client, Client RPC from server)
 7. `Net/UnrealNetwork.h` included?
 8. Check `LogNet` in output log for warnings
+
+---
+
+## Debugging workflows
+
+Test in PIE per `replication-testing-pie.md` (drive actions through `simulate_input`, observe via role-aware `UE_LOG` over the shared `ue_get_logs` stream). Network-condition emulation (`net PktLag/PktLoss/...`), `stat net`/`stat nettraffic`, and `ShowDebug Net` / `net.DrawDebugReplicationInfo` / `net.ShowNetRole` live in `network-profiling.md`.
+
+**Role-aware log (the cross-world channel):**
+```cpp
+UE_LOG(LogNet, Warning, TEXT("[%s] %s: Health=%.1f"),
+    HasAuthority() ? TEXT("SERVER") : TEXT("CLIENT"), *GetName(), Health);
+```
+
+**"Property not replicating":** `bReplicates`? → `DOREPLIFETIME` present? → `#include "Net/UnrealNetwork.h"`? → condition filtering the target client? → actor relevant (distance/`bAlwaysRelevant`)? → dormant (call `FlushNetDormancy()`)? → log in OnRep to confirm server sends → `NetUpdateFrequency` too low / try `ForceNetUpdate()`.
+
+**"RPC not firing":** called from correct side (Server←owning client, Client/Multicast←server)? → owner chain to a NetConnection intact? → `HasAuthority()`/`IsLocallyControlled()` at call site? → actor `bReplicates`? → Server RPC `_Validate` returning false? → log before and inside `_Implementation`.
+
+**"Client desync":** log value on both sides each second → client modifying it directly? → non-deterministic prediction? → OnRep applying correctly? → race (client reads before replicate)?
+
+**"Reliable buffer overflow" (disconnect):** grep for `Reliable` RPCs in Tick/timers → switch frequent ones to `Unreliable` / reduce frequency / batch → temporary: `net.MaxReliableBufferSize=512`.
+
+**Verbose logs & error strings:** `Log LogNet|LogNetTraffic|LogRep|LogNetDormancy|LogNetSerialization Verbose`. Grep: `"No owning connection"` (ownership broken) · `"Stably named object"` (ref unresolved on client) · `"Reliable buffer overflow"` · `"NaN"` (movement corruption) · `"Server rejected"` (validation fail).
+
+**Network replay** (reproduce intermittent bugs from any POV): `demorec MyReplay` / `demostop` / `demoplay MyReplay` → saved to `Saved/Demos/`.

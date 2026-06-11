@@ -1124,6 +1124,61 @@ if (HealAmount > 0.0f && SourceASC)
 }
 ```
 
+### AbilitySet Data Asset — Designer-Friendly Ability List
+
+Replace a hardcoded C++ `DefaultAbilities` array with a `UPrimaryDataAsset` subclass so designers can add/remove abilities per character archetype without C++ changes.
+
+**`DemoPro57AbilitySet.h`**
+```cpp
+UCLASS(BlueprintType)
+class MYPROJECT_API UMyAbilitySet : public UPrimaryDataAsset
+{
+    GENERATED_BODY()
+public:
+    UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Abilities")
+    TArray<TSubclassOf<UGameplayAbility>> Abilities;
+};
+```
+
+**Character header** — replace a hardcoded `TArray<TSubclassOf<UGameplayAbility>> DefaultAbilities` with:
+```cpp
+// Forward declaration (full include in .cpp)
+class UMyAbilitySet;
+
+// In the class body:
+UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Abilities")
+TObjectPtr<UMyAbilitySet> AbilitySet;
+```
+
+**`PossessedBy` grant loop** — replace any hardcoded `GiveAbility` calls:
+```cpp
+if (HasAuthority() && AbilitySystemComponent && AbilitySet)
+{
+    for (const TSubclassOf<UGameplayAbility>& AbilityClass : AbilitySet->Abilities)
+    {
+        if (AbilityClass)
+            AbilitySystemComponent->GiveAbility(FGameplayAbilitySpec(AbilityClass, 1, INDEX_NONE, this));
+    }
+}
+```
+
+**Creating the data asset via Python** (after Live Coding registers the class):
+```python
+import unreal
+asset_tools = unreal.AssetToolsHelpers.get_asset_tools()
+cls = unreal.load_class(None, "/Script/MyProject.MyAbilitySet")
+da = asset_tools.create_asset("DA_DefaultAbilities", "/Game/GAS", cls, None)
+
+jump_cls  = unreal.load_class(None, "/Script/MyProject.GA_Jump")
+dodge_cls = unreal.load_class(None, "/Script/MyProject.GA_Dodge")
+da.set_editor_property("Abilities", [jump_cls, dodge_cls])
+unreal.EditorAssetLibrary.save_asset(da.get_path_name())
+```
+
+**Assigning in the Blueprint** — C++ `UPROPERTY` fields on parent classes cannot be set via Python CDO; open the character Blueprint → Details → Abilities → set `Ability Set = DA_DefaultAbilities` manually.
+
+---
+
 ### Dynamic GameplayEffect Creation at Runtime
 
 ```cpp

@@ -6,6 +6,19 @@ Appears when opening a World Partition map. WP maps use spatial streaming — on
 
 ## Loading Regions via Python
 
+```mermaid
+flowchart TD
+  A[Need WP actors] --> B{Do you need them LOADED,<br/>or just their data?}
+  B -->|"Data only (count, class, label, position)"| Q["get_actor_descs() — no load<br/>fastest, lowest memory"]
+  B -->|Loaded| C{How much?}
+  C -->|A specific area| R["get_intersecting_actor_descs(box)<br/>then pin_actors([d.guid ...])"]
+  C -->|"Everything (small maps only)"| P["pin_actors(all guids)<br/>defeats WP on large maps"]
+  R --> U[unpin_actors when done — keeps editor responsive]
+  P --> U
+```
+
+> `pin_actors` is the reliable force-load (immediate); `load_actors` may defer to a later frame. `get_all_level_actors()` returns **loaded** actors only — use `get_actor_descs()` for the full WP picture.
+
 ### Force-Load All Actors
 ```python
 import unreal

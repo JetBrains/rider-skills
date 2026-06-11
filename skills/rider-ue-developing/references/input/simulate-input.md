@@ -145,6 +145,21 @@ Check movement state (single-line form):
 ue_execute_python --script "import unreal; pawn=unreal.GameplayStatics.get_player_pawn(unreal.get_editor_subsystem(unreal.UnrealEditorSubsystem).get_game_world(),0); mc=pawn.get_component_by_class(unreal.CharacterMovementComponent); print(mc.movement_mode)"
 ```
 
+### PIE refs & possession (observation only)
+
+```python
+ues       = unreal.get_editor_subsystem(unreal.UnrealEditorSubsystem)
+pie_world = ues.get_game_world()                                  # None when PIE not running
+pawn      = unreal.GameplayStatics.get_player_pawn(pie_world, 0)
+pc        = unreal.GameplayStatics.get_player_controller(pie_world, 0)
+accel     = pawn.get_component_by_class(unreal.CharacterMovementComponent).get_current_acceleration()
+```
+
+- **Confirm possession** with `pawn.is_player_controlled()` before expecting input to land.
+- **Do NOT** use `pc.get_editor_property('pawn')` — the Pawn property is protected and raises.
+- **Console events**: `unreal.SystemLibrary.execute_console_command(pie_world, 'ce MyEvent', pc)` fires `UFUNCTION(Exec)` events only — it does **not** drive Enhanced Input. Use `simulate_input` for real input.
+- `movement_mode` cycles `MOVE_Walking → MOVE_Falling → MOVE_Walking` on a jump; a clean before/after of `get_actor_location()` proves the drive moved the pawn.
+
 ## Python tick-driver fallback
 
 Use when `simulate_input` is unavailable. Run via `ue_execute_python`. Cleanup block at the top prevents double-arming on re-run.

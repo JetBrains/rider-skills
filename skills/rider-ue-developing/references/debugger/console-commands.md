@@ -1,6 +1,6 @@
 # Console Commands Reference
 
-Comprehensive reference of Unreal Engine console commands for debugging, profiling, and diagnostics. Commands can be entered in the editor console (`~` key), via `$UE_EXEC --script` with `unreal.SystemLibrary.execute_console_command()`, or in config files.
+Comprehensive reference of Unreal Engine console commands for debugging, profiling, and diagnostics. Commands can be entered in the editor console (`~` key), via the `ue_execute_python` MCP tool with `unreal.SystemLibrary.execute_console_command(None, "<command>")`, or in config files. Overlay commands (`stat`/`show`/`viewmode`/`ShowDebug`) render in the viewport — verify with `take_screenshot`; text commands print to the log — read with `ue_get_logs`.
 
 ## Stat Commands — Performance Monitoring
 
