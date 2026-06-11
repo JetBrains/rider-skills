@@ -7,6 +7,8 @@ Common Python recipes for editor automation. Run each via the **`ue_execute_pyth
 
 After **every** call, check `LogPython` + `LogBlueprint` via `ue_get_logs` — Python errors in UE print silently, they do not raise.
 
+> Python environment, naming conventions, `set_editor_property` vs direct access, transactions, slow-task progress, and logging live in `docs_python_scripting.md`; subsystem types/lifecycle in `docs_subsystems.md`. This file holds the **task recipes and gotchas** that aren't obvious from the API.
+
 ## Coordinate system and units
 
 **Axes** — left-handed, Z-up:
@@ -180,15 +182,6 @@ import unreal
 actors = unreal.get_editor_subsystem(unreal.EditorActorSubsystem).get_all_level_actors()
 for a in actors:
     print(f"{a.get_name()} ({a.get_class().get_name()})")
-```
-
-## Get/set actor properties
-Use `set_editor_property` / `get_editor_property` — direct attribute access does NOT work:
-```python
-# WRONG: obj.speed_x = 0.1
-# RIGHT:
-obj.set_editor_property("speed_x", 0.1)
-val = obj.get_editor_property("speed_x")
 ```
 
 ## Get viewport camera info
@@ -377,6 +370,65 @@ for _ in range(5):
 else:
     raise RuntimeError("RiderAgentBridgeLibrary not available")
 ```
+
+## Input Action asset creation
+
+The Python factory class uses an **underscore** before `Factory`:
+
+```python
+import unreal
+factory = unreal.InputAction_Factory()   # NOT unreal.InputActionFactory — that does not exist
+asset_tools = unreal.AssetToolsHelpers.get_asset_tools()
+ia = asset_tools.create_asset("IA_Dodge", "/Game/Input/Actions", None, factory)
+ia.set_editor_property("value_type", unreal.InputActionValueType.BOOLEAN)
+```
+
+To discover the correct factory name when unsure: `[f for f in dir(unreal) if 'Factory' in f and 'Input' in f]`.
+
+---
+
+## Blueprint CDO limitations for C++ parent UPROPERTYs
+
+**C++ parent class `UPROPERTY` fields cannot be set via `set_editor_property` on Blueprint CDOs.** Both access patterns fail:
+
+```python
+bp = unreal.load_asset("/Game/Characters/BP_MyCharacter")
+cdo = bp.get_default_object()                          # fails: returns None or raises
+cdo = bp.generated_class().get_default_object()        # also fails for C++ UPROPERTYs
+cdo.set_editor_property("DodgeAction", ia_asset)       # raises: "Failed to find property 'DodgeAction'"
+```
+
+This applies to **all** UPROPERTYs defined in a C++ parent class (e.g. input action pointers like `JumpAction`, `MoveAction`, `DodgeAction`), even if the Blueprint inherits from that class and the property is visible in the editor's Details panel. Only Blueprint-defined variables (added in the BP editor) can be set this way.
+
+**Workaround:** Assign these properties manually in the Unreal Editor's Blueprint Details panel. There is no Python path for this.
+
+---
+
+## Data asset creation (no factory needed)
+
+`UPrimaryDataAsset` subclasses don't use a factory. After Live Coding registers a new `UPrimaryDataAsset` subclass, create and populate the asset in one script:
+
+```python
+import unreal
+
+asset_tools = unreal.AssetToolsHelpers.get_asset_tools()
+# load_class resolves the Live-Coded class by its script path
+cls = unreal.load_class(None, "/Script/MyProject.MyDataAsset")
+da = asset_tools.create_asset("DA_MyAsset", "/Game/Data", cls, None)  # None factory = data asset
+
+# Populate arrays of class references
+ability_cls = unreal.load_class(None, "/Script/MyProject.GA_MyAbility")
+da.set_editor_property("Abilities", [ability_cls])
+
+unreal.EditorAssetLibrary.save_asset(da.get_path_name())
+```
+
+Key notes:
+- `unreal.load_class(None, "/Script/<Module>.<ClassName>")` — works after Live Coding registers the class; no editor restart required.
+- `create_asset(name, path, class, None)` — passing `None` as the factory creates a plain data asset instance.
+- For `TArray<TSubclassOf<T>>` properties, pass a Python list of class references returned by `load_class`.
+
+---
 
 ## Safe asset deletion (stop PIE first)
 ```python

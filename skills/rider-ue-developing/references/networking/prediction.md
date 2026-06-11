@@ -168,3 +168,26 @@ void AMyActor::Tick(float DeltaTime)
 4. **Timestamp mismatch** — use `GetServerWorldTimeSeconds()` instead of `GetTimeSeconds()` for synchronized timing
 5. **Pending predictions pile up** — if server is slow to confirm, client accumulates predictions → memory growth
 6. **Visual jitter** — correcting predicted visuals too aggressively causes jitter; use smoothing
+7. **Floating-point determinism** — platforms differ; never rely on FP equality across machines for critical predicted state — quantize/fixed-point it.
+
+## Latency-compensation concepts (UE mapping)
+
+**Dead reckoning** — extrapolate from last known state instead of sending every frame. UE: CMC client-prediction + server reconciliation; `FRepMovement` quantizes pos/velocity; Lyra's `FLyraReplicatedAcceleration` packs direction+magnitude+Z into **3 bytes**; server only corrects when prediction error exceeds tolerance.
+
+**Convergence** (how to apply a server correction):
+- **Snap** — instant; only for large discrepancies.
+- **Linear** — `FMath::VInterpTo` over N frames (the SimulatedProxy interp shown above).
+- **Cubic/Hermite** — smooth velocity transitions; best for observed (simulated) players.
+
+**Server-side rewind (lag compensation)** — not built in. Store N frames of hitbox transforms, rewind to the shooter's timestamp on `ServerRPC_Fire`, then test the hit. Lyra instead uses client hit-detection with server validation. Use `GetServerWorldTimeSeconds()` for the shared clock.
+
+**Consistency vs responsiveness:**
+| Approach | UE pattern |
+|---|---|
+| Client prediction + reconciliation | `CharacterMovementComponent` |
+| Server-authoritative, no prediction | Simple RPCs, no local prediction |
+| Deterministic lockstep | Custom (fixed timestep + shared RNG seed); not native |
+
+**Listen-server fairness** — the host has zero latency; for competitive play add artificial local lag or use a dedicated server.
+
+> Interest management (`GridSpatialization2D`, `NetCullDistanceSquared`, `NetPriority` buckets) and temporal decoupling (`NetUpdateFrequency`, `PlayerStateFrequencyLimiter`) are covered in `replication.md` (relevancy/scaling) and `network-profiling.md`.

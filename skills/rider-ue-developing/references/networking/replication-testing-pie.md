@@ -12,6 +12,17 @@ Two graphs: **(1)** the fast verify loop, **(2)** the one hard rule about *how* 
 >
 > **Python is for OBSERVATION only** — reading roles, locations, velocities, and logs. Never for *driving* input.
 
+### `simulate_input(mode:enhanced)` requires an active Input binding — verify first
+
+`simulate_input` is the **only** tool for driving input in replication tests. Never use `ue_execute_python` to call input or ability handlers — Python is observation-only.
+
+`simulate_input(mode:enhanced, enhancedAssetPath:"...")` delivers the injection to the Enhanced Input subsystem. The injection only reaches the character if `SetupPlayerInputComponent` has **already registered a binding for that IA asset**. If the character's `UInputAction* DodgeAction` UPROPERTY is `null`, no binding exists and the injection is silently ignored with no error.
+
+**Before using Enhanced-Input injection in a replication test:**
+1. Confirm the IA asset exists — `search_assets(query:"IA_...")`.
+2. Confirm the character Blueprint's input UPROPERTY is set to that asset — `get_asset_properties(assetPath:"/Game/.../BP_Character.uasset")` and check the field. If null, assign it manually in the Blueprint's Details panel (C++ parent UPROPERTYs cannot be set programmatically — see `editor/recipes.md` → "Blueprint CDO limitations for C++ parent UPROPERTYs").
+3. Confirm the IA is mapped to a key in the active `IMC_*` mapping context (Enhanced Input injection bypasses hardware, but the binding itself must be registered).
+
 ---
 
 ## Key facts that make this fast
@@ -86,4 +97,4 @@ flowchart TD
 | Server + N clients | same, `players:N+1` |
 | Dedicated-server topology | `players:N, netMode:client, dedicatedServer:true, runUnderOneProcess:true` |
 
-See `editor/pie-tools.md` for the handshake-verify chart, `input/` for Enhanced-Input injection, and `networking/gas-networking.md` for ASC replication modes / prediction defaults.
+See `editor/pie-tools.md` for the handshake-verify chart, `input/` for Enhanced-Input injection, and `gas/gas-networking.md` for ASC replication modes / prediction defaults.

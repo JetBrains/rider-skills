@@ -219,3 +219,33 @@ if (GetLocalRole() == ROLE_Authority) { /* server logic */ }
 if (IsLocallyControlled()) { /* owning client or server for AI */ }
 if (HasAuthority()) { /* server — most common check */ }
 ```
+
+## Relevancy, Priority & Dormancy
+
+**Relevancy** — whether an actor replicates to a given client. Relevant if ANY: `bAlwaysRelevant`; owned by the client's PC; is the client's Pawn; instigator of something relevant; within `NetCullDistanceSquared` of the view. Common ctor knobs: `bAlwaysRelevant` (GameState/managers), `bOnlyRelevantToOwner` (HUD/inventory), `NetCullDistanceSquared` (e.g. `225000000.f` ≈ 150 m). Custom logic: override `bool IsNetRelevantFor(const AActor* RealViewer, const AActor* ViewTarget, const FVector& SrcLocation) const`.
+
+**Priority** — when bandwidth-constrained, higher `NetPriority` replicates first. Defaults: AActor 1.0, APawn 2.0, APlayerController 3.0. Dynamic: override `GetNetPriority(...)` (e.g. boost when in front of viewer / recently changed).
+
+**Net update frequency** — how often the engine *checks* for changes. `NetUpdateFrequency` (player 60–100 Hz, AI 15–30, projectile 30–60, door/pickup 1–5, GameState 5–10, env prop = dormant), `MinNetUpdateFrequency` (adaptive floor). `ForceNetUpdate()` bypasses the throttle.
+
+**Dormancy** — pause replication for rarely-changing actors.
+
+| `NetDormancy` | Meaning |
+|---|---|
+| `DORM_Never` | Always checked |
+| `DORM_Awake` | Awake, may sleep |
+| `DORM_DormantAll` | Dormant for all connections |
+| `DORM_DormantPartial` | Dormant for some |
+| `DORM_Initial` | Dormant until first state change (placed actors) |
+
+On state change: `FlushNetDormancy()` + `ForceNetUpdate()` to wake and replicate now. Dormant actors are **not** sent to newly-joined clients until woken — use `DORM_DormantAll` carefully.
+
+## Scaling patterns (large-actor-count optimization)
+
+Only reach for these once profiling shows replication is the bottleneck (see `network-profiling.md`).
+
+- **FFastArraySerializer** — delta-replicated collections (inventory, equipment, tag stacks, verb messages). `FMyItem : FFastArraySerializerItem` (override `PreReplicatedRemove`/`PostReplicatedAdd`/`PostReplicatedChange`) + `FMyContainer : FFastArraySerializer { TArray<FMyItem> Items; NetDeltaSerialize → FastArrayDeltaSerialize<FMyItem,FMyContainer>(Items, DeltaParms, *this); }`. Keep authority-only data `UPROPERTY(NotReplicated)`.
+- **Replication Graph** (`UReplicationGraph`) — replaces the default driver for 50+ players. Node types: `GridSpatialization2D` (distance relevancy), `ActorList`/`AlwaysRelevant`, `AlwaysRelevant_ForConnection` (PlayerState/controllers), `PlayerStateFrequencyLimiter`. Actor routing (`EClassRepNodeMapping`): `Spatialize_Static`/`_Dynamic`/`_Dormancy`, `NotSpatial_RelevantAllConnections`, `NotSpatial_AlwaysRelevantForConnection`. Per-connection streaming-level tracking. *(Considered deprecated in favor of Iris — see `network-profiling.md` §Iris — but still functional.)*
+- **Significance** (`USignificanceManager`) — drive tick rate / anim quality / effect quality / replication priority off significance.
+- **Movement compression** — `FSharedRepMovement` (compressed pos/rot), quantized acceleration structs, multicast for fast shared movement updates (see `gas/gas-networking.md` for the 3-byte compressed-acceleration recipe).
+- **Custom struct NetSerialize** — extend `FGameplayEffectContext`/your structs with a `NetSerialize` override + `TStructOpsTypeTraits<...>{ WithNetSerializer=true, WithCopy=true }`; serialize only what clients need.

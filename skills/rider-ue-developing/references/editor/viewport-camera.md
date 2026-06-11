@@ -2,7 +2,7 @@
 
 Drive the active level editor viewport camera via the `viewport_camera` MCP tool. Backed by native C++ (`RiderAgentTools/Private/ViewportCameraController.cpp`). Validated against UE 5.8 + RiderLink.
 
-Drives the **design-time editor viewport**, not the PIE in-game camera. To move the player view during PIE, use `simulate_input` (see `simulate-user-input.md`).
+Drives the **design-time editor viewport**, not the PIE in-game camera. To move the player view during PIE, use `simulate_input` (see `input/simulate-input.md`).
 
 ---
 
@@ -90,7 +90,7 @@ flowchart TD
 
 - **Multiple viewports**: operates on the *active* level viewport — whichever was last clicked. No per-viewport selector.
 - **Game-mode camera**: during PIE the editor viewport and gameplay camera are independent. `viewport_camera` does NOT move the PIE player view. Use `simulate_input` for that.
-- **No interpolation**: these are instant snaps. For a smooth glide, arm a `register_slate_post_tick_callback` (via `ue_execute_python`) that lerps location/rotation over N frames (same pattern as the tick driver in `simulate-user-input.md`).
+- **No interpolation**: these are instant snaps. For a smooth glide, arm a `register_slate_post_tick_callback` (via `ue_execute_python`) that lerps location/rotation over N frames (same pattern as the tick driver in `input/simulate-input.md`).
 - **Editor-only**: `focus_on_actor` uses `GetActorLabel()` which is editor-only. Works fine for editor scripting; fails on cooked/standalone targets.
 
 ---
