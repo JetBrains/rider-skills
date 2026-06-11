@@ -60,6 +60,20 @@ UNiagaraPythonEmitter::GetObject() -> SIGSEGV: invalid attempt to access memory 
 
 ## Correct Approaches for Particle Effects
 
+```mermaid
+flowchart TD
+  A[Need a particle effect] --> B["Search project for an existing NiagaraSystem<br/>(/Game/Effects, /FX, /Particles, /VFX)"]
+  B --> C{Found a suitable one?}
+  C -->|yes| D["Place NiagaraActor, set_asset,<br/>tune via User. parameters only"]
+  C -->|no| E[Create the empty asset via factory,<br/>then tell the user to author it in the Niagara Editor]
+  D --> F{First property set failed?}
+  F -->|yes| STOP[STOP — do NOT iterate property names<br/>or dir/help the API. Switch strategy.]
+  F -->|no| OK([Done])
+  E --> OK
+```
+
+> **Never** author emitter internals (spawn rate, velocity, lifetime, modules, renderers) from Python — the API can't, and `NiagaraPythonEmitter` from AgentBridge crashes (SIGSEGV). If the first `set_*_parameter`/`set_editor_property` fails, stop and place-and-defer instead.
+
 ### 1. Best: Reuse Existing Project Effects
 
 Most UE projects have existing particle effects. Search the project first:

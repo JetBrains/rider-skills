@@ -1,9 +1,11 @@
 # UE Editor Recipes
 
-Common Python recipes for editor automation. Execute via ue-scripter:
-```bash
-bash ${CLAUDE_SKILL_DIR}/../ue-scripter/scripts/ue-exec.sh --script '...'
-```
+Common Python recipes for editor automation. Run each via the **`ue_execute_python`** MCP tool — never a terminal:
+
+- single snippet → `ue_execute_python(script="import unreal; ...")`
+- multi-step / resumable → `ue_execute_python(scripts=[...], startFrom=0)` (on failure, re-call with `startFrom = lastSuccessfulIndex + 1`)
+
+After **every** call, check `LogPython` + `LogBlueprint` via `ue_get_logs` — Python errors in UE print silently, they do not raise.
 
 ## Coordinate system and units
 
@@ -64,14 +66,17 @@ of radius R, place the camera at least `R * 2.5` away. Example: sphere at scale 
 
 ## Screenshots
 
-`take_high_res_screenshot` is **async** and captures a **stale frame**. Follow this protocol:
+**Prefer the `take_screenshot` MCP tool** (`kind:"viewport"|"editor_window"|"asset_preview"`, optional `width`/`height`) — it returns a disk path you read back. Capture is frame-latent, so changes and the shot must be **separate** steps:
 
-1. **Script 1** — make all changes (camera, material, actors)
-2. **Wait** — the editor must render at least 1-2 frames with the new state
-3. **Script 2** (separate execution) — take the screenshot
-4. **Wait ~5-10 seconds** before reading the file from disk (it writes asynchronously)
+```mermaid
+flowchart TD
+  A["ue_execute_python — apply all changes<br/>(camera, material, actors)"] --> B[wait 1-2 frames so the editor renders the new state]
+  B --> C["take_screenshot(kind:viewport, width:1280, height:720)"]
+  C --> D[wait ~5-10s — file writes asynchronously]
+  D --> E[read the returned path]
+```
 
-Always use absolute paths for the output file:
+Python fallback (only if you need a high-res capture the MCP tool can't produce) — `AutomationLibrary.take_high_res_screenshot` is async and captures a stale frame, so the same separate-step protocol applies. Always use an absolute output path:
 ```python
 import unreal, os
 saved = unreal.Paths.convert_relative_path_to_full(unreal.Paths.project_saved_dir())
@@ -94,7 +99,7 @@ debug view, etc.). Inputs may not be available in every permutation, causing err
   compile correctly in all permutations
 - If Custom HLSL is required, **test compilation** by checking editor logs after
   `recompile_material()` — look for `Failed to compile Material` warnings
-- Use `ue_get_logs(filter="ShaderCompiler", severity="warning")` to detect shader compile failures
+- Use `ue_get_logs(category="ShaderCompiler", minVerbosity="Warning")` to detect shader compile failures
 
 **Bad — Custom HLSL with raw input reference:**
 ```python
@@ -195,31 +200,22 @@ loc, rot = subsys.get_level_viewport_camera_info()
 ```
 
 ## Batch execution
-Execute multiple scripts in a single round-trip:
-```bash
-cat > /tmp/batch.json << 'EOF'
-[
-  {"id": "step1", "script": "import unreal\nprint(unreal.get_editor_subsystem(unreal.UnrealEditorSubsystem).get_editor_world().get_name())"},
-  {"id": "step2", "script": "import unreal\nactors = unreal.get_editor_subsystem(unreal.EditorActorSubsystem).get_all_level_actors()\nprint(len(actors))"}
-]
-EOF
-bash ${CLAUDE_SKILL_DIR}/../ue-scripter/scripts/ue-exec.sh --batch /tmp/batch.json --stop-on-error
+Run multiple scripts in a single round-trip with `ue_execute_python`'s `scripts` array — they execute sequentially with resume-on-failure (`startFrom`):
 ```
-
-## Screenshot and resize
-```bash
-# Take screenshot
-bash ${CLAUDE_SKILL_DIR}/../ue-scripter/scripts/ue-exec.sh --file ${CLAUDE_SKILL_DIR}/scripts/screenshot.py
-
-# Scale down to reduce tokens
-bash ${CLAUDE_SKILL_DIR}/scripts/resize-image.sh /path/to/image.png --max-width 400
-
-# Resize to exact dimensions
-bash ${CLAUDE_SKILL_DIR}/scripts/resize-image.sh /path/to/image.png --resize 640x480
-
-# Crop a region (left, top, right, bottom)
-bash ${CLAUDE_SKILL_DIR}/scripts/resize-image.sh /path/to/image.png --crop 100,50,700,500
+ue_execute_python(scripts=[
+  "import unreal\nprint(unreal.get_editor_subsystem(unreal.UnrealEditorSubsystem).get_editor_world().get_name())",
+  "import unreal\nactors = unreal.get_editor_subsystem(unreal.EditorActorSubsystem).get_all_level_actors()\nprint(len(actors))"
+], startFrom=0)
 ```
+On failure the response gives `lastSuccessfulIndex` — fix the offender and re-call with `startFrom = lastSuccessfulIndex + 1`; never replay completed steps.
+
+## Screenshot sizing
+Size the capture directly with `take_screenshot`'s `width`/`height` (downscale to keep the image cheap to read) — no external resize step:
+```
+take_screenshot(kind="viewport", width=640, height=480)   # exact dimensions
+take_screenshot(kind="viewport", width=400, height=0)     # 0 = preserve aspect from the other axis
+```
+The tool returns the PNG path; read that file. For cropping a sub-region, capture full-size and let the reader focus on the relevant area.
 
 ## Fog, atmosphere, and lighting property gotchas
 
@@ -310,8 +306,15 @@ refs = registry.get_referencers(ad.package_name, dep_opts)
 ```
 
 ## Scene tree
-```bash
-bash ${CLAUDE_SKILL_DIR}/../ue-scripter/scripts/ue-exec.sh --file ${CLAUDE_SKILL_DIR}/scripts/scene-tree.py
+Dump the level's actors with `ue_execute_python`:
+```python
+import unreal
+world = unreal.get_editor_subsystem(unreal.UnrealEditorSubsystem).get_editor_world()
+actors = unreal.get_editor_subsystem(unreal.EditorActorSubsystem).get_all_level_actors()
+print(f"Level: {world.get_name()}\nActors: {len(actors)}\n---")
+for a in actors:
+    loc = a.get_actor_location()
+    print(f"{a.get_actor_label()} [{a.get_class().get_name()}] ({loc.x:.0f}, {loc.y:.0f}, {loc.z:.0f})")
 ```
 Output format:
 ```
