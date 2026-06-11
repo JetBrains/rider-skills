@@ -9,7 +9,7 @@
 5. **Check DefaultEditor.ini** — If using `-allmaps`, ensure `[AllMaps]` section lists all maps: `+Map=/Game/Maps/MapName`.
 6. **Save all assets** — Unsaved changes in the editor will NOT be included in the cook.
 7. **Sufficient disk space** — Full cook+package needs 2-5x project size in temp space.
-8. **Close the editor or use the split-pipeline workaround** — Some platforms lock files. If you must package with the editor open (Live Coding active), use the three-step split pipeline in `build/live-coding-ubt.md`: `-NoCompile` cook → UBT `-LiveCoding=false` build → `-NoCompile -skipcook` pak/stage/package. Also apply the `RiderAgentTools` uplugin fix documented there, or the cook commandlet will crash.
+8. **Close the editor or use the split-pipeline workaround** — Some platforms lock files. If you must package with the editor open (Live Coding active), use the three-step split pipeline in `build/packaging.md`: `-NoCompile` cook → UBT `-LiveCoding=false` build → `-NoCompile -skipcook` pak/stage/package. Also apply the `RiderAgentTools` uplugin fix documented there, or the cook commandlet will crash.
 9. **Apple platforms (Mac/iOS)** — Verify `bUseModernXcode=True` and `CodeSigningTeam` are set in `[/Script/MacTargetPlatform.XcodeProjectSettings]`. Without these, Mac builds crash on launch (missing dylibs) and iOS builds fail (no signing team).
 10. **Disable unused plugins that link external dylibs** — e.g., `NNERuntimeORT` links `libonnxruntime` which is not staged on Mac and unavailable on iOS.
 

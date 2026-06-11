@@ -34,7 +34,7 @@ Output per result capped at 10,000 chars. For larger output, write to `Saved/*.t
   - **`exec(open(...))`**: write body to `/tmp/foo.py`, then `script="exec(open('/tmp/foo.py').read())"` — the exec call is one statement.
 - **`\n` in `--script` via `mcp__rider__execute_tool` is a literal backslash-n, not a newline.** The CLI string parser does not unescape escape sequences, so multi-line Python with `\n` raises `SyntaxError: unexpected character after line continuation character`. Always flatten to one line with `;` separators when calling via `mcp__rider__execute_tool --command "ue_execute_python --script ..."`.
 - **Batch is sequential, not parallel.**
-- **A C++ access violation cannot be caught by Python `try/except`** — it crashes the editor. Prevention happens *before* the call: check every reference value (e.g., `create_asset`/`load_asset` return) to be not `None` before using it.
+- **A C++ access violation crashes the editor and is *not* catchable by Python `try/except`.** Guard *before* dereferencing: many UE API calls (`load_asset`, `create_asset`, `find_actor_by_label`, `get_editor_world`) return `None` on failure, and calling a method on that `None` — or passing it into another UE call — triggers the access violation. Check the result is not `None` before using it.
 
 ## UE Python API cheatsheet (5.7-tested)
 
