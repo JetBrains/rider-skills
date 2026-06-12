@@ -42,16 +42,14 @@ Focus on the largest consumers first. Textures and meshes typically dominate.
 
 ### Automating Memory Snapshots
 
-```bash
-# Via ue-exec.sh for automated sessions
-ue-exec.sh "Memreport -full"
+Run `Memreport -full` through `ue_execute_python`:
 
-# Timed snapshots for comparison
-ue-exec.sh "Memreport -full"
-sleep 60
-ue-exec.sh "Memreport -full"
-# Compare the two reports to find growth
+```python
+import unreal
+unreal.SystemLibrary.execute_console_command(None, "Memreport -full")
 ```
+
+Then read the output in logs using ue_get_logs MCP tool.
 
 ### Comparing Reports
 

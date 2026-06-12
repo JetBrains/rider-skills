@@ -133,7 +133,7 @@ Trade-off: more stability = more ghosting on fast motion.
 ### "Failed to compile Material" in Logs
 **Symptom**: Material renders as default gray; `LogShaderCompilers` shows failure.
 **Diagnosis**:
-1. Check `ue-exec.sh --warnings --filter "ShaderCompiler"` for specific error
+1. Read the compiler error: use MCP tool `ue_get_logs(pattern="ShaderCompiler", minVerbosity="Warning")`
 2. Common causes: invalid node connections, unsupported features for target platform
 3. Open material in editor → check error messages in graph
 

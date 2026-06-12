@@ -51,19 +51,7 @@ FOnHealthChanged OnHealthChanged;
 
 ## Compile + Create Blueprint workflow
 
-After writing C++ files, use batch execution to compile and create a Blueprint in one pass:
-
-```bash
-cat > /tmp/compile-and-bp.json << 'EOF'
-[
-  {"id": "compile", "script": "import unreal, subprocess, json, pathlib\nport_file = pathlib.Path(unreal.Paths.project_saved_dir()) / 'AgentBridge.port'\nassert port_file.exists(), 'Saved/AgentBridge.port not found — is the editor running?'\nport = port_file.read_text().strip()\nresp = subprocess.run(['curl', '-s', '-X', 'POST', f'http://localhost:{port}/agent/build', '-H', 'Content-Type: application/json', '-d', json.dumps({'wait': True})], capture_output=True, text=True)\ndata = json.loads(resp.stdout)\nprint(f\"Compile: {data.get('status', 'unknown')}\")\nassert data.get('success', False), 'Compile failed'"},
-  {"id": "create_bp", "script": "import unreal\nfactory = unreal.BlueprintFactory()\nparent = unreal.load_class(None, '/Script/MyModule.MyActor')\nfactory.set_editor_property('parent_class', parent)\nbp = unreal.AssetToolsHelpers.get_asset_tools().create_asset('BP_MyActor', '/Game/Blueprints', None, factory)\nprint(f'Created: {bp.get_path_name()}')"}
-]
-EOF
-bash ${CLAUDE_SKILL_DIR}/../ue-scripter/scripts/ue-exec.sh --batch /tmp/compile-and-bp.json --stop-on-error
-```
-
-With `--stop-on-error`, Blueprint creation is skipped if compilation fails.
+After writing C++ files, use batch execution to compile and create a Blueprint in one pass.
 
 ## Error Recovery
 

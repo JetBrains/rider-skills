@@ -407,7 +407,7 @@ Do NOT attempt to check blueprint compile status via Python. Instead, check edit
 ```python
 # Compile (no way to read status directly)
 unreal.BlueprintEditorLibrary.compile_blueprint(bp)
-# Check logs for errors: ue-exec.sh --logs --severity error --lines 5 --filter "Blueprint"
+# Check logs for errors
 ```
 
 | Status (for reference only — not readable) | Meaning |

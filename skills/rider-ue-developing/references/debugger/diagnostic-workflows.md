@@ -50,24 +50,20 @@ UnrealEditor.exe MyProject.uproject -LogCmds="Global Verbose" -Verbose
 **Symptom:** Play-In-Editor starts fine but crashes consistently after some time (10s, 30s, 1min).
 
 ### Step 1 — Enable full logging before reproducing
-```bash
-UE_EXEC="bash ~/.claude/skills/ue-scripter/scripts/ue-exec.sh"
+Increase log verbosity for common crash sources via `ue_execute_python` tool:
 
-# Increase log verbosity for common crash sources
-$UE_EXEC --script '
+```python
 import unreal
 unreal.SystemLibrary.execute_console_command(None, "log LogGarbage Verbose")
 unreal.SystemLibrary.execute_console_command(None, "log LogScript Verbose")
 unreal.SystemLibrary.execute_console_command(None, "log LogTemp Verbose")
-'
 ```
 
 ### Step 2 — Reproduce and immediately check logs
-```bash
-$UE_EXEC --errors
-$UE_EXEC --warnings --filter "nullptr"
-$UE_EXEC --warnings --filter "accessed none"
-```
+
+ue_get_logs(minVerbosity="Error")                                                                                                                                              
+ue_get_logs(minVerbosity="Warning", pattern="nullptr")                                                                                                                         
+ue_get_logs(minVerbosity="Warning", pattern="accessed none")
 
 ### Step 3 — Common time-based crash causes
 
