@@ -209,10 +209,9 @@ checks = [
     ('Hardware RT', 'r.Lumen.HardwareRayTracing'),
 ]
 
-# Note: Python cannot directly read CVar values
-# Use ue-exec.sh --script to run this and parse output from logs
 for name, cvar in checks:
-    print('Feature: {} (CVar: {})'.format(name, cvar))
+    value = unreal.RiderAgentBridgeLibrary.read_c_var(cvar)
+    print('{}: {} = {}'.format(name, cvar, value))
 ```
 
 ## Screenshot with Render Settings
