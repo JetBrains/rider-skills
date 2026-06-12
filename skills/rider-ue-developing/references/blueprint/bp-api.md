@@ -434,85 +434,9 @@ unreal.BlueprintEditorLibrary.compile_blueprint(bp)
 12. **`set_generate_overlap_events` is a property** — use `set_editor_property('generate_overlap_events', True)`, not `set_generate_overlap_events(True)`
 13. **SubobjectDataSubsystem constructor deprecated** — use `unreal.get_engine_subsystem(unreal.SubobjectDataSubsystem)` instead of `unreal.SubobjectDataSubsystem()`
 
-## AgentBridge Blueprint API
+### `unreal.RiderAgentBridgeLibrary` API
 
-C++ bridge functions exposed to Python as `unreal.RiderAgentBridgeLibrary.*`.
-These bypass UE 5.7 Python API gaps (protected EdGraphPinType, missing graph APIs).
-
-### JSON IR Workflow (recommended)
-
-**Always work with JSON IR, never raw clipboard text.** Static scripts handle conversion.
-
-```python
-import json, sys, os
-sys.path.insert(0, '/path/to/skills/ue-blueprint/scripts')
-from bp_ir import export_graph_ir, apply_graph_ir, diff_ir, apply_diff
-
-# ── Read a graph as JSON IR ──
-ir = export_graph_ir('/Game/BP_Example', 'EventGraph')
-# Returns: {"format": "ue-blueprint-ir", "version": 1, "nodes": [...], "connections": [...]}
-
-# ── Create a graph from JSON IR ──
-ir = {
-    "format": "ue-blueprint-ir", "version": 1,
-    "blueprint": "/Game/BP_Target", "graph": "EventGraph",
-    "nodes": [
-        {"id": "evt", "class": "K2Node_Event", "x": 0, "y": 0,
-         "params": {"EventReference": "ReceiveBeginPlay"}},
-        {"id": "print", "class": "K2Node_CallFunction", "x": 300, "y": 0,
-         "params": {"FunctionReference": "/Script/Engine.KismetSystemLibrary:PrintString"},
-         "pin_defaults": {"InString": "Hello from IR!"}},
-    ],
-    "connections": [["evt.then", "print.execute"]],
-}
-result = apply_graph_ir('/Game/BP_Target', 'EventGraph', ir, clear_existing=True)
-
-# ── Diff and patch ──
-old_ir = export_graph_ir('/Game/BP_Example', 'EventGraph')
-# ... modify new_ir ...
-changes = diff_ir(old_ir, new_ir)
-apply_diff('/Game/BP_Example', 'EventGraph', changes)
-```
-
-### JSON IR Schema (v1)
-
-```json
-{
-  "format": "ue-blueprint-ir",
-  "version": 1,
-  "blueprint": "/Game/BP_Example",
-  "graph": "EventGraph",
-  "nodes": [
-    {
-      "id": "K2Node_Event_0",
-      "class": "K2Node_Event",
-      "title": "Event BeginPlay",
-      "x": 0, "y": 0,
-      "params": {"EventReference": "ReceiveBeginPlay"},
-      "pin_defaults": {"SomePin": "value"}
-    }
-  ],
-  "connections": [
-    ["SourceNode.pin_name", "TargetNode.pin_name"]
-  ]
-}
-```
-
-**Node params by class** (used in `params` field):
-| Node Class | Required Params |
-|---|---|
-| `K2Node_CallFunction` | `{"FunctionReference": "/Script/Module.Class:FuncName"}` |
-| `K2Node_Event` | `{"EventReference": "ReceiveBeginPlay"}` |
-| `K2Node_CustomEvent` | `{"CustomFunctionName": "MyEvent"}` |
-| `K2Node_VariableGet` | `{"VariableName": "MyVar"}` |
-| `K2Node_VariableSet` | `{"VariableName": "MyVar"}` |
-| `K2Node_IfThenElse` | `{}` (no params needed) |
-| `K2Node_MacroInstance` | `{"MacroGraph": "MacroName"}` |
-| `K2Node_DynamicCast` | `{"TargetType": "/Script/Module.ClassName"}` |
-
-### Low-Level AgentBridge API
-
-For cases where JSON IR is not suitable (e.g., clipboard copy-paste between BPs):
+`unreal.RiderAgentBridgeLibrary` Python module exposes functions for working with BP graphs that are missing in the UE Python API.
 
 ```python
 ab = unreal.RiderAgentBridgeLibrary

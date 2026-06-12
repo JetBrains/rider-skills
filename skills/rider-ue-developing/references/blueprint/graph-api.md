@@ -1,45 +1,19 @@
 # UE Blueprint
 
-Programmatic Blueprint manipulation via AgentBridge and JSON IR.
+Programmatic Blueprint manipulation via AgentBridge.
 
-All Python execution goes through the **Console** reference (`console.md`). Do NOT look for shell scripts, ports, or HTTP endpoints.
+All Python execution goes through the `ue_execute_python` tool. Do NOT look for shell scripts, ports, or HTTP endpoints.
 
 ## Checklist
 
 1. **Clarify** — parent class, graph, scope
-2. **Inspect existing** — export IR or run `inspect-bp.py` if modifying
+2. **Inspect existing** — retrieve graph
 3. **Create/modify Blueprint** — build graph, add nodes, wire pins, set defaults
 4. **Compile and save** — always both
 5. **Post-creation verification** — actor placed, level saved, physics/velocity validated
 6. **Code review** — after implementation
 
-## Core API — Graph Manipulation (JSON IR, preferred)
-
-```python
-import json, sys, os
-sys.path.insert(0, os.path.join('__TOOLKIT_ROOT__', 'skills', 'ue-blueprint', 'scripts'))
-from bp_ir import export_graph_ir, apply_graph_ir
-
-# Read existing graph
-ir = export_graph_ir('/Game/BP_Example', 'EventGraph')
-
-# Build a new graph
-ir = {
-    "format": "ue:blueprint-ir", "version": 1,
-    "blueprint": "/Game/BP_Target", "graph": "EventGraph",
-    "nodes": [
-        {"id": "evt", "class": "K2Node_Event", "x": 0, "y": 0,
-         "params": {"EventReference": "ReceiveBeginPlay"}},
-        {"id": "print", "class": "K2Node_CallFunction", "x": 300, "y": 0,
-         "params": {"FunctionReference": "/Script/Engine.KismetSystemLibrary:PrintString"},
-         "pin_defaults": {"InString": "Hello!"}},
-    ],
-    "connections": [["evt.then", "print.execute"]],
-}
-result = apply_graph_ir('/Game/BP_Target', 'EventGraph', ir, clear_existing=True)
-```
-
-## Core API — Low-Level AgentBridge
+## Core API — RiderAgentBridgeLibrary
 
 ```python
 ab = unreal.RiderAgentBridgeLibrary
@@ -84,22 +58,10 @@ ab.set_widget_property(bp_path, 'Title', 'Text', '"Hello World"')
 
 Supported widget classes: TextBlock, Button, Image, ProgressBar, Slider, CheckBox, ComboBoxString, EditableTextBox, CanvasPanel, VerticalBox, HorizontalBox, Overlay, ScrollBox, SizeBox, Border, Spacer, ScaleBox, GridPanel, WrapBox, WidgetSwitcher
 
-## Static scripts (in `../ue-blueprint/scripts/`)
-
-| Script | Purpose |
-|--------|---------|
-| `create-bp.py` | Create new Blueprint from parent class |
-| `discover-pins.py` | List all pins on all nodes in a BP |
-| `add-component.py` | Add a component to a Blueprint |
-| `compile-bp.py` | Compile and report status |
-| `inspect-bp.py` | Print graph structure, nodes, variables |
-| `safe-delete-bp.py` | Safely delete a BP |
-| `bp_ir.py` | JSON IR module — export/apply/diff graphs |
-
 ## Key rules
 
 - **Compile after every graph change batch** — uncompiled changes invisible to runtime
-- **Pin names are internal** — "Exec" = `execute`/`then`, "Return Value" = `ReturnValue`. Use `discover-pins.py`.
+- **Pin names are internal** — "Exec" = `execute`/`then`, "Return Value" = `ReturnValue`.
 - **No duplicate events** — only ONE `Event BeginPlay` per BP. Check existing nodes first.
 - **Variables before nodes** — create variables BEFORE Get/Set nodes that reference them
 - **Paths start with `/Game/`** — never `/Content/`, never include `.uasset`
@@ -113,15 +75,13 @@ Supported widget classes: TextBlock, Button, Image, ProgressBar, Slider, CheckBo
 4. Validate physics/velocity values — see **coder.md** physics conventions.
 5. Check player pawn class — code casting to `ACharacter` silently fails if project uses `DefaultPawn`.
 
-see: `../ue-blueprint/knowledge/bp-api.md`
-see: `../ue-blueprint/knowledge/gotchas.md`
-see: `../ue-blueprint/knowledge/recipes.md`
+see: `./bp-api.md`
+see: `./gotchas.md`
+see: `./recipes.md`
 
 ---
 
 ## MCP tools
-
-> **Note:** `ue_export_blueprint_nodes` and `ue_import_blueprint_nodes` do **not** exist as MCP tools in the current Rider server. Use `ue_execute_python` with `unreal.RiderAgentBridgeLibrary` for all BP graph manipulation.
 
 | Tool | Purpose | Scenario |
 |------|---------|----------|
@@ -137,3 +97,5 @@ see: `../ue-blueprint/knowledge/recipes.md`
 | `take_screenshot` | Capture PNG of editor/viewport/asset preview | Verify BP result visually; `kind=asset_preview` with `assetPath` for a BP thumbnail |
 | `open_file_in_editor` | Open a file in Rider | Open the C++ parent class for reference while working in the BP |
 | `search_symbol` | Find the C++ class behind a Blueprint | Locate parent class declaration before scripting BP graph nodes |
+| `ue_import_blueprint_nodes` | Import Blueprint nodes from Unreal clipboard text format into a graph. | Add mutliple nodes to the Blueprint graph at once |
+| `ue_export_blueprint_nodes` | Export Blueprint graph nodes to Unreal clipboard text format. | Inspect UE properties format presentation of Blueprint's graph nodes |

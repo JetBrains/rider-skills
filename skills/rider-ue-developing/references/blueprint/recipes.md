@@ -3,10 +3,6 @@
 Common Blueprint creation patterns as complete Python scripts.
 All recipes use the UE 5.7 API (`add_member_variable` + `EdGraphPinType` + CDO defaults).
 
-> **Note**: Blueprint graph logic (nodes, pins, wiring) **cannot** be created programmatically
-> in UE 5.7. Recipes cover asset creation, variables, components, and structure only.
-> All Blueprint logic must be added manually in the editor.
-
 ## Recipe 1: Basic Actor Blueprint
 
 ```python

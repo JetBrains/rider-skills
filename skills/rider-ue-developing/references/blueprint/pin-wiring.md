@@ -1,13 +1,5 @@
 # Blueprint Pin Wiring Guide
 
-> **WARNING — UE 5.7**: `connect_pins()` does **NOT exist** in UE 5.7.
-> `get_all_graphs()` is also removed. There is **no Python API to wire pins** between nodes
-> or manipulate graph connections programmatically.
->
-> The pin name conventions below are kept as **reference only** — useful for understanding
-> Blueprint graph structure when inspecting existing Blueprints, but they **cannot be applied
-> programmatically**.
-
 ## Pin Discovery
 
 Use `find_event_graph` or `find_graph` to locate graphs (not `get_all_graphs`):

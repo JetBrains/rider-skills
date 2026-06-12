@@ -1,10 +1,5 @@
 # Blueprint Node Types & Class Paths
 
-> **WARNING — UE 5.7**: `BlueprintEditorLibrary.add_node()` does **NOT exist** in UE 5.7.
-> There is no Python API to programmatically add nodes to Blueprint graphs.
-> The node class paths below are kept as **reference only** — useful for manually identifying
-> nodes in the editor or understanding graph structure, but they **cannot be created via Python**.
-
 ## Event Nodes
 
 | Node | Class Path | Notes |
@@ -153,16 +148,6 @@ print(json.dumps(json.loads(nodes), indent=2))
 
 Always call this before adding nodes — avoids duplicate events (only ONE `Event BeginPlay` per BP).
 
-### Export full graph IR (preferred for multi-node inspection/edit)
-
-```python
-from bp_ir import export_graph_ir, apply_graph_ir
-ir = export_graph_ir('/Game/MyBP', 'EventGraph')          # full graph as JSON
-result = apply_graph_ir('/Game/MyBP', 'EventGraph', modified_ir, clear_existing=True)
-```
-
-IR is diffable and does the whole change in one round-trip. Use low-level AgentBridge only for single-node additions.
-
 ### Add a node, wire it, compile
 
 ```python
@@ -185,6 +170,6 @@ unreal.EditorAssetLibrary.save_asset(bp)
 1. `ue_status` — require `connected = true` and `playState != "Play"`.
 2. `search_assets { query: "MyBP" }` — get the `/Game/...` path.
 3. `ue_execute_python` → `ab.get_blueprint_graph_nodes(bp_path, graph)` — audit what's there.
-4. Make the change (IR for multi-node; low-level AgentBridge for single-node).
+4. Make the relevant changes.
 5. Compile + save in the same `ue_execute_python` call.
 6. `get_asset_properties` or `ue_status` to verify.

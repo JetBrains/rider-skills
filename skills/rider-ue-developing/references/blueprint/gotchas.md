@@ -11,7 +11,7 @@ These rules were learned through painful debugging. Violating them causes silent
 - The pin you see as "Exec" in the editor is internally `execute` or `then`
 - "Return Value" is internally `ReturnValue` (no space)
 - Boolean output pins are often `ReturnValue` not `Result` or `bResult`
-- **Always discover pin names first**: use the `discover-pins.py` script
+- **Always discover pin names first**
 - Wiring a wrong pin name silently fails — no error, no connection
 
 ## 3. Node Position Matters for Readability
@@ -61,7 +61,6 @@ These rules were learned through painful debugging. Violating them causes silent
 
 ## 10. Safe Blueprint Deletion — Clearing GCObjectReferencer Holds
 - **GCObjectReferencer** blocks deletion when: BP editor is open, generated class was loaded, level instances exist, or PIE is running
-- Use `safe-delete-bp.py` script which handles all 8 steps with fallbacks
 - Key technique: `EditorLoadingAndSavingUtils.unload_packages([pkg])` releases holds that GC alone cannot clear
 
 ## 11. NEVER rename_asset + create_asset at the Same Path
