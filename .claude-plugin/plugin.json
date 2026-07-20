@@ -1,7 +1,7 @@
 {
   "name": "rider-skills",
   "version": "0.1.0",
-  "description": "JetBrains Rider agent skills for semantic refactoring, debugger-driven runtime analysis, and Unreal Engine C++ authoring, testing, and live debugging.",
+  "description": "JetBrains Rider agent skills for semantic refactoring, debugger-driven runtime analysis, C# test discovery, and Unreal Engine C++ authoring, testing, and live debugging.",
   "author": {
     "name": "JetBrains"
   },
@@ -14,6 +14,7 @@
     "ide",
     "refactoring",
     "debugging",
+    "test-discovery",
     "unreal-engine",
     "mcp"
   ]
