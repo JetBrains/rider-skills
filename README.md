@@ -1,10 +1,10 @@
 # Rider Skills
 
-A set of [Agent Skills](https://docs.claude.com/en/docs/claude-code/skills) that give coding agents **IDE-grade code intelligence inside JetBrains Rider**. Instead of falling back to text edits, `grep`, and print debugging, these skills drive Rider's refactoring engine, debugger, and static analysis through the **Rider MCP server** — so a rename updates every resolved reference, a breakpoint inspects real runtime state, and diagnostics catch errors before a full build.
+A set of [Agent Skills](https://docs.claude.com/en/docs/claude-code/skills) that give coding agents **IDE-grade code intelligence inside JetBrains Rider**. Instead of falling back to text edits, `grep`, and print debugging, these skills drive Rider's refactoring engine, debugger, code coverage data, and static analysis through the **Rider MCP server** — so a rename updates every resolved reference, a breakpoint inspects real runtime state, existing tests are located precisely, and diagnostics catch errors before a full build.
 
 ## What's included
 
-Two skills work across every Rider-supported language; three are focused on Unreal Engine C++.
+Two skills work across every Rider-supported language, one locates existing C# tests, and three are focused on Unreal Engine C++.
 
 ### General — any Rider solution
 
@@ -14,6 +14,12 @@ Two skills work across every Rider-supported language; three are focused on Unre
 | [`debugging-code`](skills/debugging-code/SKILL.md) | Debugger-driven runtime root-cause analysis — set breakpoints and tracepoints, step, inspect frame values, and evaluate expressions to answer questions static reading can't. |
 
 Both cover .NET/C#, F#, VB, C++, Unity, Unreal Engine, XAML, Razor, and other mixed-language projects.
+
+### C#/.NET
+
+| Skill | Purpose |
+| --- | --- |
+| [`finding-tests`](skills/finding-tests/SKILL.md) | Locate existing tests for a C# class or method using Rider's test coverage data before adding or editing tests. |
 
 ### Unreal Engine C++ — requires a `.uproject`
 
@@ -25,7 +31,7 @@ Both cover .NET/C#, F#, VB, C++, Unity, Unreal Engine, XAML, Razor, and other mi
 
 ## How it works
 
-Each skill's `SKILL.md` teaches the workflow, decision points, and guardrails; the paired `reference/` files hold the detailed tool contracts and patterns. At runtime a skill:
+Each skill's `SKILL.md` teaches the workflow, decision points, and guardrails; where needed, `reference/` files hold detailed tool contracts and patterns. At runtime a skill:
 
 1. **Checks for the Rider MCP tools** in the session's deferred-tool list and loads their live schemas — the schemas are authoritative for parameter names, never guessed.
 2. **Uses Rider's semantic engine** (ReSharper / IDE index) for anything grep can't resolve: cross-language usages, generated/reflected UE code, `nameof`, XAML `x:Name`, `<see cref>`, and more.
@@ -69,7 +75,7 @@ For agents without plugin support, copy or symlink individual skill folders from
 
 | Path | Contents |
 | --- | --- |
-| `skills/` | All five skills, one folder each. |
+| `skills/` | All six skills, one folder each. |
 | `skills/<skill>/SKILL.md` | Skill definition — frontmatter (name, description, allowed tools) and workflow. |
 | `skills/<skill>/reference/` | Progressive-disclosure reference: tool contracts, patterns, conventions loaded on demand. |
 | `.claude-plugin/` | Claude Code plugin (`plugin.json`) and marketplace (`marketplace.json`) metadata. |

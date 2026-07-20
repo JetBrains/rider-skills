@@ -1,7 +1,7 @@
 {
   "name": "rider-skills",
   "version": "0.1.0",
-  "description": "JetBrains Rider agent skills for semantic refactoring, debugger-driven runtime analysis, and Unreal Engine C++ authoring, testing, and live debugging.",
+  "description": "JetBrains Rider agent skills for semantic refactoring, debugger-driven runtime analysis, C# test discovery, and Unreal Engine C++ authoring, testing, and live debugging.",
   "author": {
     "name": "JetBrains",
     "url": "https://www.jetbrains.com/rider/"
@@ -15,14 +15,15 @@
     "ide",
     "refactoring",
     "debugging",
+    "test-discovery",
     "unreal-engine",
     "mcp"
   ],
   "skills": "./skills/",
   "interface": {
     "displayName": "Rider Skills",
-    "shortDescription": "Rider refactoring, debugging, and Unreal Engine C++ skills",
-    "longDescription": "Use Rider Skills to guide agents toward JetBrains Rider MCP workflows for semantic refactoring, debugger-driven root-cause analysis, and Unreal Engine C++ authoring, testing, and live debugging across Rider-supported projects.",
+    "shortDescription": "Rider refactoring, debugging, test discovery, and Unreal Engine C++ skills",
+    "longDescription": "Use Rider Skills to guide agents toward JetBrains Rider MCP workflows for semantic refactoring, debugger-driven root-cause analysis, C# test discovery, and Unreal Engine C++ authoring, testing, and live debugging across Rider-supported projects.",
     "developerName": "JetBrains",
     "category": "Coding",
     "capabilities": [
@@ -33,7 +34,8 @@
     "websiteURL": "https://github.com/JetBrains/rider-skills",
     "defaultPrompt": [
       "Refactor this code symbol using Rider.",
-      "Debug this runtime failure in Rider."
+      "Debug this runtime failure in Rider.",
+      "Find existing tests for this C# method."
     ]
   }
 }
