@@ -1,4 +1,0 @@
-interface:
-  display_name: "UE Code Authoring v8"
-  short_description: "Author Unreal C++ with source audits and Rider checks"
-  default_prompt: "Use $ue-code-authoring-v8 to implement this Unreal Engine C++ change with source audit and Rider checks."

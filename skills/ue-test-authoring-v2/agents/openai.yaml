@@ -1,4 +1,0 @@
-interface:
-  display_name: "UE Test Authoring v2"
-  short_description: "Author Unreal tests through Rider execute_tool"
-  default_prompt: "Use $ue-test-authoring-v2 to author this Unreal Engine automated test with Rider execute_tool diagnostics."

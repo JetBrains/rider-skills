@@ -1,4 +1,0 @@
-interface:
-  display_name: "UE Code Authoring"
-  short_description: "Author Unreal C++ with Rider checks"
-  default_prompt: "Use $ue-code-authoring-v3 to implement this Unreal Engine C++ change with focused Rider diagnostics."

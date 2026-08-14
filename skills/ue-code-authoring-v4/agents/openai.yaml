@@ -1,4 +1,0 @@
-interface:
-  display_name: "UE Code Authoring v4"
-  short_description: "Author Unreal C++ through Rider execute_tool"
-  default_prompt: "Use $ue-code-authoring-v4 to implement this Unreal Engine C++ change with Rider execute_tool diagnostics."
