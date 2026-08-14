@@ -1,5 +1,5 @@
 ---
-name: ue-test-authoring
+name: ue-test-authoring-old
 description: "Use when writing or modifying UE automated tests (Automation, CQTest, Functional, Gauntlet, LowLevel) with Rider MCP available. Value over bash/grep: IDE diagnostics catch test registration errors, wrong RunTest return type, and missing includes before a build; get_symbol_info verifies the API under test. DO NOT TRIGGER for: debugging existing test failures (use ue-live-debugging), Blueprint-only testing. When Rider MCP is unavailable, runs in reduced mode — standard file tools only, IDE diagnostics skipped."
 allowed-tools: Read Glob Grep Bash Write Edit ToolSearch
 metadata:

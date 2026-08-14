@@ -1,5 +1,5 @@
 ---
-name: create-test-ue-jb
+name: ue-test-authoring
 description: Use when writing or modifying Unreal Engine automated tests — Automation (IMPLEMENT_SIMPLE_AUTOMATION_TEST, DEFINE_SPEC), CQTest, Functional, Gauntlet, LowLevel/Catch2 — along with test modules and the Build.cs dependencies they need, in a project open in JetBrains Rider. Test source goes through Read/Grep/Glob/Edit/Write; Rider supplies symbol lookup for the API under test, registration and include diagnostics, formatting, and builds through its MCP tools. Do not use for Blueprint-only testing, or for diagnosing an existing test failure that needs no test code change.
 metadata:
   author: JetBrains

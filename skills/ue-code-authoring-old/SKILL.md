@@ -1,5 +1,5 @@
 ---
-name: ue-code-authoring
+name: ue-code-authoring-old
 description: "Use when writing or modifying Unreal Engine C++ (classes, actors, components, subsystems, interfaces, function libraries) in Codex, especially when Rider MCP is available. Use Rider diagnostics to catch UHT/reflection errors and missing module dependencies without a full build, and lint_files for cross-file consistency. Do not use for Blueprint-only tasks or editor automation with no C++ authoring. When Rider MCP is unavailable, run in reduced mode with Codex file tools only and document skipped IDE diagnostics."
 ---
 
