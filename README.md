@@ -25,9 +25,9 @@ Both cover .NET/C#, F#, VB, C++, Unity, Unreal Engine, XAML, Razor, and other mi
 
 | Skill | Purpose |
 | --- | --- |
-| [`ue-code-authoring`](skills/ue-code-authoring/SKILL.md) | Write and modify UE C++ (classes, actors, components, subsystems, interfaces, function libraries) with IDE diagnostics catching UHT/reflection errors and missing module deps before a build. |
+| [`ue-code-authoring`](skills/ue-code-authoring-old/SKILL.md) | Write and modify UE C++ (classes, actors, components, subsystems, interfaces, function libraries) with IDE diagnostics catching UHT/reflection errors and missing module deps before a build. |
 | [`ue-live-debugging`](skills/ue-live-debugging/SKILL.md) | Root-cause UE C++ crashes, runtime bugs, and unexpected behavior — call-hierarchy tracing, live breakpoints, crash-log triage, and live PIE state inspection via Python. |
-| [`ue-test-authoring`](skills/ue-test-authoring/SKILL.md) | Author UE automated tests (Automation, CQTest, Functional, Gauntlet, LowLevel) with IDE checks for registration errors, wrong `RunTest` return types, and missing includes. |
+| [`ue-test-authoring`](skills/ue-test-authoring-old/SKILL.md) | Author UE automated tests (Automation, CQTest, Functional, Gauntlet, LowLevel) with IDE checks for registration errors, wrong `RunTest` return types, and missing includes. |
 
 ## How it works
 

@@ -1,162 +1,149 @@
 ---
-name: ue-test-authoring
-description: "Use when writing or modifying UE automated tests (Automation, CQTest, Functional, Gauntlet, LowLevel) with Rider MCP available. Value over bash/grep: IDE diagnostics catch test registration errors, wrong RunTest return type, and missing includes before a build; get_symbol_info verifies the API under test. DO NOT TRIGGER for: debugging existing test failures (use ue-live-debugging), Blueprint-only testing. When Rider MCP is unavailable, runs in reduced mode — standard file tools only, IDE diagnostics skipped."
-allowed-tools: Read Glob Grep Bash Write Edit ToolSearch
+name: create-test-ue-jb
+description: Use when writing or modifying Unreal Engine automated tests — Automation (IMPLEMENT_SIMPLE_AUTOMATION_TEST, DEFINE_SPEC), CQTest, Functional, Gauntlet, LowLevel/Catch2 — along with test modules and the Build.cs dependencies they need, in a project open in JetBrains Rider. Test source goes through Read/Grep/Glob/Edit/Write; Rider supplies symbol lookup for the API under test, registration and include diagnostics, formatting, and builds through its MCP tools. Do not use for Blueprint-only testing, or for diagnosing an existing test failure that needs no test code change.
 metadata:
-  argument-hint: "[test type, feature/system to test, or failing scenario]"
+  author: JetBrains
 ---
 
 # UE Test Authoring
 
-End-to-end workflow for writing Unreal Engine automated tests backed by **Rider MCP** for IDE-grade code quality.  
-Three additions over plain test writing: (1) Rider diagnostics catch issues before a full build, (2) `lint_files` enforces consistency across test files, (3) `get_project_problems` surfaces cross-file issues invisible to grep.
+Write Unreal Engine automated tests in the project's own style. Author the test with your own file tools, audit it against the behavior the user actually asked to be covered, and use Rider for what an IDE knows and grep does not: the resolved API under test, registration and include diagnostics, solution code style, and builds.
 
----
+## Gate
 
-## GATE — mandatory checks before any test code is written
+1. Confirm the workspace is a UE project: `Glob` for `*.uproject` at the root. If there is none, stop and say the task must run from the UE project root.
+2. Confirm the request needs test code written or changed. A runtime bug, a plain build request, or a non-test source change → clarify scope first.
+3. Read only what the test needs: the `.uproject`, the test module's `Build.cs`, one nearby test that already uses the same framework, and the declaration of the API under test.
 
-### 1. UE Project Check
+## Tool split
 
-Verify the current working directory contains a `.uproject` file:
+| Job | Use |
+|---|---|
+| Find test files or modules by name or glob | `Glob` |
+| Find text on disk (test macros, helper names, tag strings) | `Grep` |
+| Read a file, or a range of it | `Read` (with `offset`/`limit`) |
+| Create or change test source | `Write` / `Edit` |
+| Resolve the API under test when the IDE index knows it (engine headers, generated/reflected code, other modules) | Rider `search_symbol` |
+| Confirm a contract at a known position (nullable return, editor-only, preconditions) | Rider `get_symbol_info` |
+| Registration, include, and reflection diagnostics; formatting; build | Rider `get_file_problems`, `lint_files`, `reformat_file`, `build_solution_*` |
 
-```bash
-find . -maxdepth 1 -name "*.uproject" | head -1
+Do not shell out through `Bash` for `rg`, `find`, `sed`, `cat`, `head`, or `tail` — the dedicated tools are cheaper and give clickable results. Keep `Bash` for git and for toolchain commands the task genuinely requires.
+
+Use `TodoWrite` only when the work spans three or more files or has ordered dependencies; a single new test file does not need a checklist. For wide discovery in an unfamiliar test suite ("which framework does this project use", "where do PIE network tests live"), one `Explore` subagent is worth it — but keep the test authoring, the coverage audit, and the diagnostics in the main thread where you can see the source.
+
+## Reach Rider
+
+Rider is reached through a router tool — `execute_tool(command="<tool> --flag value ...")` — and, on configurations that expose them, through the individual tools directly.
+
+In Claude Code the tool name is namespaced by the MCP server key from the environment's config: `mcp__<key>__execute_tool`. The key is not knowable in advance — `rider` in a local IDE, `ide-headless-mcp` in a headless eval container, `jetbrains` or `ide` elsewhere, and it may contain hyphens. Never type a prefix from memory. Resolve it once, by bare name:
+
+```
+ToolSearch(query="+execute_tool", max_results=5)
 ```
 
-If **no `.uproject` found** → STOP.
+`+<bare_name>` requires that substring in the tool name and ignores the prefix, so one call returns the exact namespaced name *and* its schema. Call that name back verbatim and reuse the prefix for the rest of the session. If several servers match, take the one whose description names the IDE. The same search resolves anything else in this skill — `+lint_files`, `+get_file_problems`, `+search_symbol` — and where the individual tools are exposed, a direct typed call beats hand-serializing flags into the router. If nothing matches at all, there is no Rider: keep writing correct test source and state plainly that Rider diagnostics were skipped.
 
-> "This skill requires an Unreal Engine project (a `.uproject` file must be in the working directory). The current directory does not appear to be a UE project. Navigate to the project root and retry."
+Every Rider tool also takes `rootFolder`. Pass the solution root whenever it is not the current working directory — otherwise the call fails with `doesn't correspond to any open project` and lists the projects that are actually open. Take the path from that list and reuse it.
 
-### 2. Task Is Test-Authoring Check
+| Need | Command |
+|---|---|
+| Find existing tests for a framework or feature | `search_text --q IMPLEMENT_SIMPLE_AUTOMATION_TEST` (or `TEST_CLASS`, `DEFINE_SPEC`) |
+| Find test files | `search_file --q '*Tests*.cpp'` |
+| Find the API under test | `search_symbol --q <name>` |
+| Confirm a contract after reading the file | `get_symbol_info --filePath <path> --line <n> --column <n>` |
+| Trace what the method under test calls or needs | `analyze_calls --symbolFqn <FullyQualifiedCallable> --analysisKind OUTGOING_CALLS` |
+| Check one changed test file | `get_file_problems --filePath <path>` |
+| Check several changed files | `lint_files --files '["Source/FooTests/Private/FooTests.cpp"]'` |
+| Build through Rider, for broad changes only | `build_solution_start`, then poll `build_solution_state` until `state` is not `Running` |
+| Project-wide problems after a successful build | `get_project_problems` |
+| Reformat changed files | `reformat_file --files '["Source/FooTests/Private/FooTests.cpp"]'` |
 
-The task must involve **writing or modifying test code**. If the user is asking about something that has no test authoring component — e.g. fixing a runtime bug, building the project, or changing non-test source files — clarify scope before proceeding.
+Command syntax:
 
-If there is no test to write or modify → STOP and ask the user what test they want authored.
+- Every `--flag` takes a value — bare flags are not supported. Booleans need an explicit `true`/`false`.
+- List parameters are JSON arrays, even for one element, wrapped in single quotes: `--files '["Source/FooTests/Private/FooTests.cpp"]'`.
+- Paths are relative to the solution root, with forward slashes.
+- `search_text`, `search_regex`, `search_file`, and `search_symbol` all take `--q` — not `--query`. `search_symbol` finds project symbols only; add `--include_external true` for an engine or SDK symbol, which is common when the API under test is engine-side.
+- `analyze_calls` is name-based: `--symbolFqn` plus `--analysisKind`, never a path/line/column. `get_symbol_info` is the position-based one.
+- `get_file_problems` returns errors only by default; add `--errorsOnly false` when warnings or style suggestions matter.
+- `lint_files` defaults to `--min_severity warning` (includes suggestions and hints); `--min_severity error` is the strict gate.
+- `Missing required parameters: …` and `Tool '<x>' not found` are input mistakes, not tool failures — correct the flag or the name and retry once. Fall back to source-only work only if no router or tool is available at all, or a call actually ran and failed in a way no input change fixes.
+- Trust a successful Rider result. Do not re-read the file, re-`Grep`, `git diff`, or build just to confirm a clean diagnostic, lint, format, or build.
 
-### 3. Rider MCP Availability Check
+Independent calls belong in one message — `get_file_problems` for two changed files, or a `search_symbol` plus a `search_text`, as parallel calls rather than one round trip each.
 
-Check the `<system-reminder>` deferred-tool list for Rider MCP tools. Load live schemas with ToolSearch before calling any tool. Schemas are **authoritative for parameter names** — never guess. If `execute_tool` is the only tool returned, use CLI mode (see `reference/rider-mcp-tools.md — execute_tool mode`).
+## Framework selection
 
-If **no Rider MCP tools appear in the deferred list**:
+Pick the minimal framework that covers the requested test. Read [reference/ue-test-patterns.md](reference/ue-test-patterns.md) when choosing a framework or writing its boilerplate.
 
-> "Rider MCP tools are unavailable. Open Rider with this project loaded and the MCP server enabled, then retry. Falling back to standard file tools — IDE diagnostics will not run."
+| Need | Preferred framework |
+|---|---|
+| Pure C++ logic, no UObject | LowLevelTestsRunner / Catch2 |
+| Simple one-off C++ assertion | Automation `IMPLEMENT_SIMPLE_AUTOMATION_TEST` or CQTest `TEST` |
+| C++ class or subsystem with setup/teardown | CQTest `TEST_CLASS` |
+| Grouped BDD-style behavior | Automation `DEFINE_SPEC` |
+| Multi-frame async behavior | CQTest `TestCommandBuilder` |
+| Server/client replication in PIE | CQTest `PIENetworkComponent` |
+| Actor behavior in a real level | Functional Test |
+| Full game startup, stability, or performance CI | Gauntlet |
 
-Proceed with standard tools (Read/Write/Edit/Grep/Bash) only, skipping all `mcp__<prefix>__*` steps. Document that quality steps were skipped.
+Match the framework the project already uses unless the user asks for a different one. A heavier framework than the behavior needs — a map, PIE, or Gauntlet for logic that is testable in-process — is a defect, not thoroughness.
 
----
+## Implementation path
 
-## Path Selection
+1. Locate the existing test module and the framework pattern its neighbors use.
+2. Locate the API under test and read its declaration *from source* — the real signature, access level, return type, and any preconditions. Do not assert against an API you inferred from a call site.
+3. Write or edit the test with `Edit`/`Write`.
+4. Audit the test against the requested coverage (next section) *before* reaching for a build.
+5. Run the changed-file diagnostics:
+   - one or two files → `get_file_problems` per file, in parallel;
+   - three or more, or any new module/framework/`Build.cs` change → a single `lint_files` call.
+6. Fix every error and every warning that bears on the test, then stop with a short summary naming any diagnostics you could not run.
 
-**Fast path** for adding a single test case to an existing test file — no new module, no new framework, no `Build.cs` changes:
-1. Verify `.uproject` (Gate 1)
-2. Locate the existing test file with rg/Grep or Rider `search_text`
-3. Read 1–2 existing test cases in the same file
-4. Add the minimal test case using the standard Edit tool
-5. Run `get_file_problems` on the changed file if Rider MCP is available
-6. Show git diff
+After `Edit`/`Write` there is nothing to save: Rider refreshes each file from disk before it analyzes, formats, or refactors it. Two consequences — `reformat_file` rewrites files on disk, so run it last and `Read` a file again before editing it further; and if this project installs Rider's PostToolUse quality-check hook, the hook output you already got after an edit *is* the analysis (it blocks on errors, reports warnings, and skips reformatting for C/C++ while still inspecting it) — fix what it reports instead of re-running the same check.
 
-**Full workflow** when creating a new test module, adding a new framework, changing `Build.cs`, or modifying multiple test files → continue to Checklist below.
+Use the full quality path only when creating a new test module, adding a framework, changing `Build.cs`, changing module/plugin/target files, or touching several files:
 
-## Checklist
+1. `get_file_problems` / `lint_files` on changed files → fix errors and relevant warnings.
+2. Start a build only once changed-file diagnostics are clean. Do not start or keep polling a build while errors remain. Do not write off include, registration, or generated-code diagnostics as indexing noise unless a re-run after `reformat_file` is clean, or a build has already compiled that file successfully.
+3. `build_solution_start`; poll `build_solution_state`; fix build errors.
+4. `get_project_problems` after a successful build, filtered to changed files.
+5. `reformat_file` on the changed files.
 
-Use the agent's native planning/todo mechanism when available. For simple one-file tasks, keep the plan implicit and proceed directly. For complex changes, track:
+In a containerized eval workspace, do not run `build_solution_start` for a source-only single-test-file change when no `.Build.cs`, module, plugin, target, or framework dependency changed. The verifier performs the authoritative clean build and automation run. Do not go hunting for engine scripts or hand-run UBT either — spend the turn on correct test source, focused diagnostics, and an honest report of what could not be verified.
 
-1. **GATE** — UE project check + test task check + Rider prefix resolution
-2. **Clarify** — ask targeted questions if the framework or scope is ambiguous (skip if clear)
-3. **Select framework** — choose the right test framework using the decision guide below
-4. **Pre-flight** — read `.uproject`, locate existing test modules, scan patterns via Rider
-5. **Write test** — create or modify test `.h`/`.cpp` using framework patterns
-6. **Rider diagnostics** — `get_file_problems` per changed file; fix all errors and warnings
-7. **Batch lint** *(if multiple test files changed or new patterns introduced)* — `lint_files`; fix remaining issues
-8. **Build** — `build_solution_start`; poll `build_solution_state` until done; fix errors
-9. **Post-build quality** *(for non-trivial changes)* — `get_project_problems`; address Critical/Important
-10. **Reformat** — `reformat_file` on each changed file
+## Coverage audit
 
----
+Before any build-only validation and before your final message, turn the requested behavior into a short list of what the test must actually prove, and compare it to the test you wrote. Clean diagnostics and a green build show the test compiles and registers; they show nothing about whether it exercises the requested behavior.
 
-## Workflow
+Check every item that applies:
 
-**Search routing:** use rg/Grep for portable text discovery; use Rider `search_text`/`search_file` when IDE index, generated/reflected UE code, unsaved editor state, or result compactness is likely to help. Use Rider semantic tools (`search_symbol`, `get_file_problems`, `lint_files`, build, `get_project_problems`) for code intelligence.
+- **The named behavior is asserted** — every case the request names has an assertion that fails when the behavior regresses. A test that passes against a deliberately broken implementation proves nothing; if you cannot see that it would fail, it is not covering the case.
+- **Boundary cases** — the strict comparisons, equality cases, zero/negative/null inputs, and empty-collection cases the request names each have their own assertion, not one combined happy-path check.
+- **Real API** — the test calls the actual declared names, signatures, and access levels of the unit under test. Do not assert on a helper you wish existed, or route around the requested entry point.
+- **Registration** — the test class sits in an `Editor` or `Test` module, uses the framework's exact registration macro, and carries a valid context flag plus a product/engine filter. A test that never registers silently passes CI.
+- **Required state** — anything the unit reads (world, owner, component, subsystem, initialized attributes) is set up in the test, or the test is written to the no-world/no-owner path deliberately.
+- **Isolation and teardown** — the test does not depend on another test's state or ordering; spawned actors, worlds, delegates, and effects created by the test are torn down in the matching hook.
+- **Module dependencies** — new includes are backed by the narrowest `Build.cs` dependencies that satisfy them, added to the *test* module.
+- **Async correctness** — assertions on multi-frame behavior run after completion (`.Until()`, `FDoneDelegate`, the latent command's done callback), never immediately after queuing.
 
-### Step 0 — Clarify (if ambiguous)
+If an item is uncertain, `Read` the relevant declaration or a narrow range around it. Do not infer coverage from a green build. Do not run `git diff`/`git status` unless a `.git` directory exists in or above the workspace.
 
-Skip if the request names a specific framework, class, or test scenario.
+## Test authoring rules
 
-Ask **one question at a time**, max two questions total:
+1. Match the project's existing framework, file layout, and naming style unless a new framework was requested.
+2. Keep test modules as editor/test modules when the framework requires it; never register editor tests in a runtime module.
+3. `RunTest` returns `bool` — return `true` only after setup and assertions have actually completed.
+4. Add only the module dependencies the included headers and framework use require.
+5. For CQTest async work, queue commands up front and assert after `.Until()` or the equivalent completion hook.
+6. For replication tests, use the project's existing PIE/network helpers before inventing harness code.
+7. When a protected UE hook is deliberately the unit under test, prefer a source-only Automation test and widen access narrowly with `#define protected public` around only the tested header include. Do not escalate to maps, PIE, Functional Tests, Blueprint tests, or Gauntlet unless the behavior truly needs them.
+8. `lint_files` weak warnings about that narrow `#define protected public` shim are acceptable when the protected hook is the API under test. Do not rewrite the test into an indirect path that stops exercising the hook just to silence them.
+9. For a domain-specific test pattern, read the matching reference only when needed; keep the core workflow focused on the requested behavior, real API, required state, and observable boundaries.
 
-- **"Is this a pure logic test (no actors, no world) or does it need an in-game context?"** — determines Automation/CQTest vs Functional Test
-- **"Does the test need to verify replication or server/client behavior?"** — affects CQTest `PIENetworkComponent` vs plain test
-- **"Is there an existing test module I should add to, or should this be a new module?"** — check with `list_directory_tree` before asking
+## References
 
-### Step 1 — Select Framework
-
-Pick the minimal framework that covers the testing need. See `reference/ue-test-patterns.md — Framework Selection` for the decision matrix.
-
-### Step 2 — Pre-flight
-
-Read project context before writing any test: `.uproject` file and `Source/<TestModule>/<TestModule>.Build.cs` using the standard Read tool.
-
-Find existing test modules and patterns using `search_text` (look for `IMPLEMENT_SIMPLE_AUTOMATION_TEST`, `TEST_CLASS`, `DEFINE_SPEC`). Use Glob or `list_directory_tree` to browse directory structure.
-
-Use `search_symbol` to locate the module under test for `Build.cs` dependency lookup.
-
-Read 1–2 existing test files in the same area using the standard Read tool to match conventions.
-
-**Determine from pre-flight:** whether a test module exists (add to it vs. create new), which test macros the project uses (match them), and required `PrivateDependencyModuleNames`.
-
-See `reference/ue-test-patterns.md — New Test Module Setup` if a new module is needed.
-
-### Step 3 — Write Test
-
-**Create new test module** (if none exists) — see `reference/ue-test-patterns.md — New Test Module Setup`.
-
-**Create a new test file** using the standard Write tool.
-
-**Modify an existing test file** using the standard Edit tool.
-
-See `reference/ue-test-patterns.md` for ready-to-use patterns for each framework and critical pitfalls.
-
-### Step 4 — Rider Diagnostics (per file)
-
-After writing each file, run `get_file_problems` on it immediately.
-
-**Act on every result:**
-- **Error** → fix before proceeding; re-run `get_file_problems` to confirm clear
-- **Warning** → fix unless it's a known intentional pattern (document why if skipping)
-- **Hint / Info** → note for later; don't block on these
-
-Iterate: edit → diagnose → edit until zero errors and zero warnings on all changed files.
-
-### Step 5 — Batch Lint *(skip for isolated single-file test additions)*
-
-If multiple test files changed or new patterns were introduced, run `lint_files`.
-
-Fix any issues surfaced here that `get_file_problems` missed (cross-file include violations, project-level style rules).
-
-### Step 6 — Build
-
-Compile via Rider using `build_solution_start` — do NOT shell-build or ask the user to rebuild manually.
-
-Poll using `build_solution_state` until `state != "Running"`.
-
-**On build failure:**
-- Read the error output from `build_solution_state`
-- Identify which file/line caused the error
-- Fix with the standard Edit tool, re-run `get_file_problems` on the fixed file, then rebuild
-- **Do NOT proceed to Step 7 with build errors outstanding**
-
-### Step 7 — Post-Build Quality Gate *(skip for small test additions)*
-
-For non-trivial changes, run `get_project_problems`. Filter results to files you changed. For each issue:
-- **Error** → fix immediately
-- **Warning on your files** → fix unless intentionally deferred
-
-### Step 8 — Reformat
-
-Use `reformat_file` on every file you created or modified.
-
----
-
-see: reference/rider-mcp-tools.md — ALL Rider MCP tools: complete parameter reference, execute_tool mode table, UE editor/asset/debugger tools
-see: reference/rider-tools.md — Test authoring workflow patterns: fix-loop, common lookups, test discovery
-see: reference/ue-test-patterns.md — Framework patterns (Automation, CQTest, Functional, Gauntlet, LowLevel), new module setup, critical pitfalls
+- [reference/ue-test-patterns.md](reference/ue-test-patterns.md) — read for framework selection, boilerplate, new test module setup, and framework pitfalls.
+- [reference/attribute-set-tests.md](reference/attribute-set-tests.md) — read only when testing an Unreal `UAttributeSet` or its attribute-change hooks.
+- [reference/rider-tools.md](reference/rider-tools.md) — read for the fix-loop and full quality-pass patterns.
+- [reference/rider-mcp-tools.md](reference/rider-mcp-tools.md) — read for a less common Rider tool or an argument you are unsure of.
