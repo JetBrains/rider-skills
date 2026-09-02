@@ -59,6 +59,7 @@ Do not assert runtime conclusions before this evidence is captured unless you ha
 1. `AUTO`: the agent can run and rerun the scenario directly (run config, test, executable, endpoint). Use `xdebug_start_debugger_session` to launch with debugging, or `execute_run_configuration` for a non-debug run when you only need output or exit code.
 2. `ASSISTED`: reproduction requires a user-only action (UI flow, auth, external dependency, hardware interaction).
 3. `HYBRID`: try `AUTO` once or twice, then switch to `ASSISTED` if the failure does not reproduce.
+4. `ATTACH`: the target process is already running (started outside the IDE, long-lived host, game editor, service) and must not be restarted. Use `xdebug_attach_to_process --pid <pid>`; set the required breakpoints *before* attaching when the target may finish quickly. If the result is `selection_required`, promptly repeat with the same PID and one exact returned `availableDebuggers` name as `--debuggerKind`; on `attached`, take `sessionId` from the result. See [reference/tools/xdebug_attach_to_process.md](reference/tools/xdebug_attach_to_process.md).
 
 If the candidate target is a test, default to `AUTO`. Never ask the user to reproduce before breakpoints are prepared.
 
@@ -77,7 +78,9 @@ Do not modify the user's project setup (NuGet packages, target framework, `.cspr
 ## Session Binding
 - Before preparing breakpoints or launching, call `execute_tool(command="xdebug_get_debugger_status")`.
 - If an active relevant session exists, continue inside it instead of starting another.
-- Capture the exact `sessionId` and reuse it in all session-scoped calls. If a session stops, times out, or disappears, refresh it via `xdebug_get_debugger_status` before reusing.
+- Capture the exact `sessionId` and reuse it in all session-scoped calls.
+- Keep the returned `sessionId`. Use `xdebug_get_debugger_status --sessionId <id>` after the session stops to read its retained state.
+- Active-only tools return `SESSION_NOT_ACTIVE` for a retained stopped session. `SESSION_EXPIRED` means that its diagnostics left the five-session retention window.
 - After the paused location changes, do not reuse a stale `frameIndex` or `path`; re-read from the fresh `xdebug_get_stack`.
 
 ## Run Configuration Resolution
@@ -92,6 +95,9 @@ Do not modify the user's project setup (NuGet packages, target framework, `.cspr
 
 ## Breakpoint Targeting Modes
 `xdebug_set_breakpoint` has two mutually exclusive targeting modes (location vs `breakpointId`) — never mix them in one call, and in `breakpointId` mode pass the full desired state since provided fields become the result. After each call confirm the returned `lineText` matches the intended line. Modes and the full contract: [reference/tools/xdebug_set_breakpoint.md](reference/tools/xdebug_set_breakpoint.md).
+
+## Noisy .NET Exceptions
+When a session keeps suspending on an expected or handled exception that is not the one under investigation (a first-chance `System.OperationCanceledException`, for example), mute that single type with `execute_tool(command="xdebug_ignore_exception --exceptionType System.OperationCanceledException")`, then `RESUME`. This sets the exception breakpoint's suspend policy to `NONE` and is **persistent** — it survives the session, exactly like unchecking the exception in the UI — so use it only for the type that is genuinely in the way, and never as a blanket way to silence exception stops. Prefer it over globally muting breakpoints, which would also drop the breakpoints you are relying on.
 
 ## Library And Decompiled Source Debugging
 Breakpoints can be set in library and framework code. `read_file` reads external source files and the bundled decompiler output for assemblies (and SourceLink / PDB-resolved originals when available). To obtain a path:
@@ -117,7 +123,7 @@ Debugger Run Progress:
 - [ ] After a fresh start or RESUME: `xdebug_control_session --action WAIT_FOR_PAUSE`
 - [ ] At each pause: `xdebug_get_stack` + values / eval (`xdebug_get_frame_values`, `xdebug_get_value_by_path`, `xdebug_evaluate_expression`)
 - [ ] Decide next movement (`STEP_OVER` / `STEP_INTO` when evidence is nearby, OR a new breakpoint then `RESUME`)
-- [ ] For tracepoints: `xdebug_control_session --action DRAIN_EVENTS`
+- [ ] For tracepoints: `xdebug_control_session --action DRAIN_EVENTS`, then read the program's own output with `xdebug_get_process_output`
 - [ ] Stop on the first proven incorrect state transition or a stated blocker
 - [ ] Wrap-up (cleanup + report)
 ```
@@ -130,7 +136,7 @@ Discipline applied at every step:
 - When a frame points to external / decompiled code, `read_file` it and set deeper breakpoints there; don't skip it.
 
 ## Events And Tracepoints
-- `breakpointErrorsTail` / `tracepointOutputsTail` (`xdebug_control_session`; see its reference) are **populated only by JVM-based debuggers**. Rider's debugger is not JVM-based, so do not rely on them: preflight a `--condition` with `xdebug_evaluate_expression` in a paused frame, and confirm tracepoint logging from the program's run/console output.
+- `breakpointErrorsTail` / `tracepointOutputsTail` (`xdebug_control_session`; see its reference) are **populated only by JVM-based debuggers**. Rider's debugger is not JVM-based, so do not rely on them: preflight a `--condition` with `xdebug_evaluate_expression` in a paused frame, and read tracepoint logging from the program's own output via `execute_tool(command="xdebug_get_process_output --sessionId <id>")`.
 - For tracepoint-style logging without suspension, use `execute_tool(command="xdebug_set_breakpoint --filePath <path> --line <n> --isLogMessage true --suspendPolicy NONE")` (or `--isLogStack true`).
 
 ## Expression Discipline
@@ -157,4 +163,4 @@ After debugging:
 3. Next action depends on the user's goal: if they asked for diagnosis only, conclude with the report and a recommended next step; if the task implies a code change, implement the fix based on the proven root cause.
 
 ## Tool Reference
-See [reference/tools.md](reference/tools.md) for the signatures and parameter-by-parameter notes of the 13 `xdebug_*` MCP tools plus `get_run_configurations` / `execute_run_configuration`.
+See [reference/tools.md](reference/tools.md) for the signatures and parameter-by-parameter notes of the Rider debugger tools and `get_run_configurations` / `execute_run_configuration`.

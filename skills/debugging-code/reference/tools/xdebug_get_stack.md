@@ -4,7 +4,7 @@ Use this tool to see the sequence of method calls that led to the current execut
 ## Parameters
 | Name | Type | Description |
 | --- | --- | --- |
-| sessionId | string | Debug session ID. Use the current ID returned by `xdebug_get_debugger_status` or `xdebug_start_debugger_session`. If a session has stopped, timed out, or disappeared, refresh the session list before reusing an old ID. Format: uses session name as ID by default; if multiple sessions share the same name, ID is `<sessionName>#<executionId>`. If null and exactly one active session exists, it is selected automatically. If multiple sessions are active and sessionId is omitted, the call fails. Default: null. |
+| sessionId | string | Debug session ID. Use the current ID returned by `xdebug_get_debugger_status` or `xdebug_start_debugger_session`. The ID remains stable after the session stops. Active-only operations return `SESSION_NOT_ACTIVE` for retained stopped sessions. If null and exactly one active session exists, it is selected automatically. If multiple sessions are active and sessionId is omitted, the call fails. Default: null. |
 | threadId | string | Thread ID to get stack for. This value should come from `xdebug_get_threads` and matches the debugger thread display name, not an opaque numeric ID. If not specified, uses the current/active thread. Default: null. |
 | limit | integer | Max frames to return. Default: 200. |
 | offset | integer | Page offset. Default: 0. |
