@@ -14,7 +14,7 @@
 - [xdebug_get_threads](tools/xdebug_get_threads.md) — Returns the list of threads in the debug session.
 - [xdebug_get_value_by_path](tools/xdebug_get_value_by_path.md) — Gets the value of a nested object by following a path of property names.
 - [xdebug_list_breakpoints](tools/xdebug_list_breakpoints.md) — Lists all breakpoints in the project or in a specific file.
-- [xdebug_remove_breakpoint](tools/xdebug_remove_breakpoint.md) — Removes breakpoints filtered by owner and optional selectors.
+- [xdebug_remove_breakpoints](tools/xdebug_remove_breakpoints.md) — Removes one or more breakpoints in one request.
 - [xdebug_run_to_line](tools/xdebug_run_to_line.md) — Resumes execution to a target line.
 - [xdebug_set_breakpoints](tools/xdebug_set_breakpoints.md) — Creates or updates one or more breakpoints or logpoints in a single request.
 - [xdebug_set_variable](tools/xdebug_set_variable.md) — Mutates a variable value by path in the selected stack frame.
@@ -28,3 +28,4 @@
 ## Rider Debugger
 
 - [xdebug_ignore_exception](tools/xdebug_ignore_exception.md) — Stop the debugger from breaking on a given .NET exception type ("ignore" the exception).
+

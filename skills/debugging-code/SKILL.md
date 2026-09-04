@@ -93,7 +93,7 @@ Do not modify the user's project setup (NuGet packages, target framework, `.cspr
 - Always start with `execute_tool(command="xdebug_list_breakpoints")` and treat the returned `owner` (`user` / `agent`) as source of truth.
 - Build a baseline snapshot (`breakpointId -> enabled`) before modifying anything.
 - Temporarily disable `owner=user` breakpoints not required for the current path with `xdebug_set_breakpoints` ID-mode items; restore them only once, at the end of the debugger cycle.
-- Avoid broad breakpoint churn between iterations. `xdebug_remove_breakpoint` defaults to `--owner agent`; for global cleanup run two calls: `--owner agent` then `--owner user`.
+- Avoid broad breakpoint churn between iterations. Each `xdebug_remove_breakpoints --breakpoints` item defaults to `owner=agent`. For global cleanup, use `[{"owner":"agent"},{"owner":"user"}]`.
 
 ## Breakpoint Targeting Modes
 Each `xdebug_set_breakpoints` item has two mutually exclusive targeting modes (location vs `breakpointId`) — never mix them in one item, and in `breakpointId` mode pass the full desired state. Results preserve input order and report per-item success/error; confirm every successful result's `lineText`. Full contract: [reference/tools/xdebug_set_breakpoints.md](reference/tools/xdebug_set_breakpoints.md).
@@ -155,7 +155,7 @@ Before concluding, capture: the exact failing message/body; exception type and/o
 
 ## Wrap-up
 After debugging:
-1. Clean up: `execute_tool(command="xdebug_remove_breakpoint --owner agent")`, restore disabled user breakpoints to their baseline, and `execute_tool(command="xdebug_control_session --action STOP")` if the session is no longer needed.
+1. Clean up: `execute_tool(command="xdebug_remove_breakpoints --breakpoints '[{\"owner\":\"agent\"}]'")`, restore disabled user breakpoints to their baseline, and `execute_tool(command="xdebug_control_session --action STOP")` if the session is no longer needed.
 2. Report:
    - root cause in one sentence;
    - causal chain in 3-6 bullets;

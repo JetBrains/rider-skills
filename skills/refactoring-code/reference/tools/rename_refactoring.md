@@ -41,3 +41,4 @@ Rename a symbol declared in the given file and all its usages across the solutio
 | error | object? |  |
 | &nbsp;&nbsp;kind* | string |  |
 | &nbsp;&nbsp;hint | string? |  |
+
