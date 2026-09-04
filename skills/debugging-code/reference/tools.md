@@ -16,7 +16,7 @@
 - [xdebug_list_breakpoints](tools/xdebug_list_breakpoints.md) — Lists all breakpoints in the project or in a specific file.
 - [xdebug_remove_breakpoint](tools/xdebug_remove_breakpoint.md) — Removes breakpoints filtered by owner and optional selectors.
 - [xdebug_run_to_line](tools/xdebug_run_to_line.md) — Resumes execution to a target line.
-- [xdebug_set_breakpoint](tools/xdebug_set_breakpoint.md) — Creates or updates a breakpoint or a logpoint (a non-suspending "Evaluate and log" breakpoint).
+- [xdebug_set_breakpoints](tools/xdebug_set_breakpoints.md) — Creates or updates one or more breakpoints or logpoints in a single request.
 - [xdebug_set_variable](tools/xdebug_set_variable.md) — Mutates a variable value by path in the selected stack frame.
 - [xdebug_start_debugger_session](tools/xdebug_start_debugger_session.md) — Start a debugger session for either an existing run configuration by name or a code location
 

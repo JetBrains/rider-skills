@@ -4,7 +4,7 @@ Use this tool to remove previously set breakpoints.<br/><br/>Behavior:<br/>- `ow
 ## Parameters
 | Name | Type | Description |
 | --- | --- | --- |
-| breakpointId | string | Canonical breakpoint ID returned by `xdebug_set_breakpoint` or `xdebug_list_breakpoints`. |
+| breakpointId | string | Canonical breakpoint ID returned by `xdebug_set_breakpoints` or `xdebug_list_breakpoints`. |
 | filePath | string | Optional input: Path to the file. Supports project-relative paths, paths with '..', absolute paths, archive entries like '/path/lib.jar!/pkg/Foo.class', and URLs such as 'file://', 'jar://', and 'jrt://'. Any path returned from the other tools can be passed as is (e.g. paths from 'search_*' tools). |
 | line | integer | Optional input: line number (1-based) of the breakpoint to remove. |
 | owner | user \\| agent | Breakpoint owner filter. Default: agent. |

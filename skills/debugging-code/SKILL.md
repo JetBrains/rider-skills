@@ -10,6 +10,8 @@ Debugger-first runtime root-cause analysis for solutions opened in Rider, includ
 
 Invoke every tool through `execute_tool(command="<tool> --arg value ...")`. Do not call the underlying handles directly. Read `reference/tools.md` only for the specific tool you are about to call; do not pre-load the whole tree.
 
+`xdebug_set_breakpoints --breakpoints` takes one quoted JSON array, for example `--breakpoints '[{"filePath":"Program.cs","line":42},{"filePath":"Worker.cs","line":18,"condition":"id == 7"}]'`.
+
 ## Goal
 Use debugger evidence to answer concrete runtime questions when static code reading is not enough, or to confirm ideas or results from static analysis — including whether execution reaches or does not reach an agent-selected code location via a breakpoint or tracepoint.
 
@@ -32,7 +34,7 @@ If the codebase domain contains debug-related concepts, reason explicitly about 
 
 ## Activation Gate (tool availability)
 Use this skill only when the debugger MCP tools are available in the current session. Minimum required set:
-- `xdebug_set_breakpoint`
+- `xdebug_set_breakpoints`
 - `xdebug_start_debugger_session`
 - `xdebug_control_session`
 - `xdebug_get_stack`
@@ -90,11 +92,11 @@ Do not modify the user's project setup (NuGet packages, target framework, `.cspr
 ## Breakpoint Ownership And Hygiene
 - Always start with `execute_tool(command="xdebug_list_breakpoints")` and treat the returned `owner` (`user` / `agent`) as source of truth.
 - Build a baseline snapshot (`breakpointId -> enabled`) before modifying anything.
-- Temporarily disable `owner=user` breakpoints not required for the current path via `execute_tool(command="xdebug_set_breakpoint --breakpointId <id> --enabled false")`; restore them only once, at the end of the debugger cycle.
+- Temporarily disable `owner=user` breakpoints not required for the current path with `xdebug_set_breakpoints` ID-mode items; restore them only once, at the end of the debugger cycle.
 - Avoid broad breakpoint churn between iterations. `xdebug_remove_breakpoint` defaults to `--owner agent`; for global cleanup run two calls: `--owner agent` then `--owner user`.
 
 ## Breakpoint Targeting Modes
-`xdebug_set_breakpoint` has two mutually exclusive targeting modes (location vs `breakpointId`) — never mix them in one call, and in `breakpointId` mode pass the full desired state since provided fields become the result. After each call confirm the returned `lineText` matches the intended line. Modes and the full contract: [reference/tools/xdebug_set_breakpoint.md](reference/tools/xdebug_set_breakpoint.md).
+Each `xdebug_set_breakpoints` item has two mutually exclusive targeting modes (location vs `breakpointId`) — never mix them in one item, and in `breakpointId` mode pass the full desired state. Results preserve input order and report per-item success/error; confirm every successful result's `lineText`. Full contract: [reference/tools/xdebug_set_breakpoints.md](reference/tools/xdebug_set_breakpoints.md).
 
 ## Noisy .NET Exceptions
 When a session keeps suspending on an expected or handled exception that is not the one under investigation (a first-chance `System.OperationCanceledException`, for example), mute that single type with `execute_tool(command="xdebug_ignore_exception --exceptionType System.OperationCanceledException")`, then `RESUME`. This sets the exception breakpoint's suspend policy to `NONE` and is **persistent** — it survives the session, exactly like unchecking the exception in the UI — so use it only for the type that is genuinely in the way, and never as a blanket way to silence exception stops. Prefer it over globally muting breakpoints, which would also drop the breakpoints you are relying on.
@@ -137,7 +139,7 @@ Discipline applied at every step:
 
 ## Events And Tracepoints
 - `breakpointErrorsTail` / `tracepointOutputsTail` (`xdebug_control_session`; see its reference) are **populated only by JVM-based debuggers**. Rider's debugger is not JVM-based, so do not rely on them: preflight a `--condition` with `xdebug_evaluate_expression` in a paused frame, and read tracepoint logging from the program's own output via `execute_tool(command="xdebug_get_process_output --sessionId <id>")`.
-- For tracepoint-style logging without suspension, use `execute_tool(command="xdebug_set_breakpoint --filePath <path> --line <n> --isLogMessage true --suspendPolicy NONE")` (or `--isLogStack true`).
+- For tracepoint-style logging without suspension, use an `xdebug_set_breakpoints` item with `isLogMessage=true` or `isLogStack=true` and `suspendPolicy=NONE`.
 
 ## Expression Discipline
 `xdebug_evaluate_expression` and `xdebug_set_variable` take a raw expression in the current frame's language (C#, C++, F#, or VB) — see their reference files for the exact input rules. Beyond that contract:
