@@ -21,3 +21,4 @@ Use this when the target process was started outside the IDE or by another tool 
 | name | string? | Human-readable session name. |
 | state | string? | Current session state. |
 | breakpointsMuted | boolean? | Whether breakpoints are globally muted for this debugger session. |
+

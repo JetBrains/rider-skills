@@ -46,3 +46,4 @@ Use this tool to install a batch of hypothesis-driven logpoints before one repro
 | &nbsp;&nbsp;[].error | string? | Expected validation or targeting error for this operation. Present only when success=false. |
 | totalBreakpoints* | integer | Current total number of breakpoints after all operations. |
 | breakpointsMuted | boolean | Whether breakpoints are globally muted for the resolved debugger session. |
+
