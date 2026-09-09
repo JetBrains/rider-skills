@@ -138,14 +138,14 @@ Discipline applied at every step:
 - When a frame points to external / decompiled code, `read_file` it and set deeper breakpoints there; don't skip it.
 
 ## Events And Tracepoints
-- `breakpointErrorsTail` / `tracepointOutputsTail` (`xdebug_control_session`; see its reference) are **populated only by JVM-based debuggers**. Rider's debugger is not JVM-based, so do not rely on them: preflight a `--condition` with `xdebug_evaluate_expression` in a paused frame, and read tracepoint logging from the program's own output via `execute_tool(command="xdebug_get_process_output --sessionId <id>")`.
+- `breakpointErrorsTail` / `tracepointOutputsTail` (`xdebug_control_session`; see its reference) are **populated only by JVM-based debuggers**. Rider's debugger is not JVM-based, so do not rely on them: preflight a `condition` expression with `xdebug_evaluate_expression` in a paused frame, and read tracepoint logging from the program's own output via `execute_tool(command="xdebug_get_process_output --sessionId <id>")`.
 - For tracepoint-style logging without suspension, use an `xdebug_set_breakpoints` item with `isLogMessage=true` or `isLogStack=true` and `suspendPolicy=NONE`.
 
 ## Expression Discipline
 `xdebug_evaluate_expression` and `xdebug_set_variable` take a raw expression in the current frame's language (C#, C++, F#, or VB) — see their reference files for the exact input rules. Beyond that contract:
-- For global / static symbols in `--condition` and `--expression`, prefer fully-qualified names to avoid `Unresolved reference` caused by missing imports in the debugger expression context.
+- For global / static symbols in the `condition` field and `--expression`, prefer fully-qualified names to avoid `Unresolved reference` caused by missing imports in the debugger expression context.
 - The router parses the outer `execute_tool(command=...)` line with `ParametersListUtil`. When the expression contains double quotes, wrap the outer command string in single quotes; when it contains single quotes, wrap the outer in double quotes; avoid mixing both without escaping.
-- If paused, preflight a risky `--condition` expression with `xdebug_evaluate_expression` before relying on it.
+- If paused, preflight a risky `condition` expression with `xdebug_evaluate_expression` before relying on it.
 
 ## Frame Climbing And Rewind
 When stopped in a frame, inspect upper frames to reconstruct data provenance: identify who passed the current values and the earliest caller frame where state became incorrect. If the required location is already passed: restart the run with an earlier breakpoint (`AUTO`), or set an earlier breakpoint and ask the user to reproduce again (`ASSISTED`). Do not continue from a point already too late for the needed evidence. When a frame points to external / decompiled code, read it with `read_file` and set breakpoints there if needed to trace provenance deeper.
