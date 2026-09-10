@@ -4,7 +4,7 @@ Breakpoint configuration does not require an active debug session.<br/><br/>Batc
 ## Parameters
 | Name | Type | Description |
 | --- | --- | --- |
-| breakpoints* | array[object] | Ordered breakpoint create/update requests. Pass 1..50 items, or an empty array only for a breakpointsMuted operation. |
+| breakpoints* | array[object] | Ordered breakpoint create or update requests. Pass 1..50 items. |
 | &nbsp;&nbsp;[].breakpointId | string? | Canonical breakpoint ID returned by `xdebug_set_breakpoints` or `xdebug_list_breakpoints`. Provide this for ID mode; omit it for location mode. |
 | &nbsp;&nbsp;[].filePath | string? | Path to the file. Required with `line` in location mode; optional in ID mode to relocate a line breakpoint. |
 | &nbsp;&nbsp;[].line | integer? | 1-based line number. Required with `filePath` in location mode; optional in ID mode to relocate a line breakpoint. |
@@ -15,8 +15,6 @@ Breakpoint configuration does not require an active debug session.<br/><br/>Batc
 | &nbsp;&nbsp;[].temporary | boolean? | Whether this is a temporary breakpoint removed after its first hit. Default: false. |
 | &nbsp;&nbsp;[].suspendPolicy | string? | Suspend policy: ALL suspends all threads, THREAD suspends only the thread that hits the breakpoint, and NONE suspends no threads. Default: ALL. |
 | &nbsp;&nbsp;[].enabled | boolean? | Whether the breakpoint is enabled. Default: true. |
-| sessionId | string | Active debug session ID used only to report or change its breakpoint mute state. If null, the tool reports the mute state only when exactly one active session exists. Default: null. |
-| breakpointsMuted | boolean | Session-wide breakpoint mute flag. When provided, `breakpoints` must be empty and an active session must be selected. The flag does not change the `enabled` setting of a breakpoint. Default: null. |
 | rootFolder | string | The path to the root folder of the Rider solution or project. Pass this value ALWAYS if you are aware of it. It reduces numbers of ambiguous calls.<br/>In the case you know only the current working directory you can use it as the root folder path.<br/>If you're not aware about the root folder path you can ask user about it. |
 
 ## Output
@@ -45,5 +43,4 @@ Breakpoint configuration does not require an active debug session.<br/><br/>Batc
 | &nbsp;&nbsp;[].message | string? | Additional note about the completed operation. |
 | &nbsp;&nbsp;[].error | string? | Expected validation or targeting error for this operation. Present only when success=false. |
 | totalBreakpoints* | integer | Current total number of project breakpoints after all operations. |
-| breakpointsMuted | boolean | Whether breakpoints are muted for the selected session. False when no session is selected. |
 
