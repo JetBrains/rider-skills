@@ -6,15 +6,15 @@ Breakpoint configuration does not require an active debug session.<br/><br/>Batc
 | --- | --- | --- |
 | breakpoints* | array[object] | Ordered breakpoint create or update requests. Pass 1..50 items. |
 | &nbsp;&nbsp;[].breakpointId | string? | Canonical breakpoint ID returned by `xdebug_set_breakpoints` or `xdebug_list_breakpoints`. Provide this for ID mode; omit it for location mode. |
-| &nbsp;&nbsp;[].filePath | string? | Path to the file. Required with `line` in location mode; optional in ID mode to relocate a line breakpoint. |
+| &nbsp;&nbsp;[].filePath | string? | Path to the file. Supports project-relative paths, paths with '..', absolute paths, archive entries like '/path/lib.jar!/pkg/Foo.class', and URLs such as 'file://', 'jar://', and 'jrt://'. Any path returned from the other tools can be passed as is (e.g. paths from 'search_*' tools). Required with `line` in location mode; optional in ID mode to relocate a line breakpoint. |
 | &nbsp;&nbsp;[].line | integer? | 1-based line number. Required with `filePath` in location mode; optional in ID mode to relocate a line breakpoint. |
 | &nbsp;&nbsp;[].condition | string? | Condition expression; the breakpoint triggers only when it evaluates to true. Null clears an existing condition. |
 | &nbsp;&nbsp;[].logExpression | string? | Expression that the debugger evaluates and logs when the breakpoint triggers. Null clears an existing expression. |
-| &nbsp;&nbsp;[].isLogMessage | boolean? | Whether to log the breakpoint source position when hit. Default: false. |
-| &nbsp;&nbsp;[].isLogStack | boolean? | Whether to log the current stack trace when hit. Default: false. |
-| &nbsp;&nbsp;[].temporary | boolean? | Whether this is a temporary breakpoint removed after its first hit. Default: false. |
-| &nbsp;&nbsp;[].suspendPolicy | string? | Suspend policy: ALL suspends all threads, THREAD suspends only the thread that hits the breakpoint, and NONE suspends no threads. Default: ALL. |
-| &nbsp;&nbsp;[].enabled | boolean? | Whether the breakpoint is enabled. Default: true. |
+| &nbsp;&nbsp;[].isLogMessage* | boolean | Whether to log the breakpoint source position when hit. Default: false. |
+| &nbsp;&nbsp;[].isLogStack* | boolean | Whether to log the current stack trace when hit. Default: false. |
+| &nbsp;&nbsp;[].temporary* | boolean | Whether this is a temporary breakpoint removed after its first hit. Default: false. |
+| &nbsp;&nbsp;[].suspendPolicy* | ALL \\| THREAD \\| NONE | Suspend policy: ALL suspends all threads, THREAD suspends only the thread that hits the breakpoint, and NONE suspends no threads. Default: ALL. |
+| &nbsp;&nbsp;[].enabled* | boolean | Whether the breakpoint is enabled. Default: true. |
 | rootFolder | string | The path to the root folder of the Rider solution or project. Pass this value ALWAYS if you are aware of it. It reduces numbers of ambiguous calls.<br/>In the case you know only the current working directory you can use it as the root folder path.<br/>If you're not aware about the root folder path you can ask user about it. |
 
 ## Output
@@ -43,4 +43,3 @@ Breakpoint configuration does not require an active debug session.<br/><br/>Batc
 | &nbsp;&nbsp;[].message | string? | Additional note about the completed operation. |
 | &nbsp;&nbsp;[].error | string? | Expected validation or targeting error for this operation. Present only when success=false. |
 | totalBreakpoints* | integer | Current total number of project breakpoints after all operations. |
-

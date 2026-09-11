@@ -29,4 +29,3 @@
 ## Rider Debugger
 
 - [xdebug_ignore_exception](tools/xdebug_ignore_exception.md) — Stop the debugger from breaking on a given .NET exception type ("ignore" the exception).
-
