@@ -127,8 +127,14 @@ Simulate player input. Each mode has its own set of named params.
 
 ## Debugger (xdebug)
 
-### `xdebug_set_breakpoint`
-Set standard, conditional, or logpoint breakpoints.
+### `xdebug_set_breakpoints`
+Set one or more standard, conditional, or logpoint breakpoints. Pass the items in the `breakpoints` array.
+
+### `xdebug_set_breakpoints_muted`
+Mute or unmute all breakpoints for an active debug session.
+
+### `xdebug_remove_breakpoints`
+Remove one or more breakpoints. Pass the items in the `breakpoints` array.
 
 ### `xdebug_get_debugger_status`
 Get current debugger state.

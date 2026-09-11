@@ -20,4 +20,3 @@ Output is captured for every debug process started inside the IDE, including ses
 | availableEndLine* | integer | Exclusive end of the line range currently retained in the process output. |
 | isRunning* | boolean | Whether the debug process is still running. |
 | exitCode | integer? | Process exit code when termination has been observed. |
-

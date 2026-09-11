@@ -6,9 +6,9 @@ Use this tool to remove arbitrary breakpoint IDs or locations in one call.<br/><
 | --- | --- | --- |
 | breakpoints* | array[object] | Ordered breakpoint removal requests. Pass 1..50 items. |
 | &nbsp;&nbsp;[].breakpointId | string? | Canonical breakpoint ID returned by a set or list tool. Provide this for ID mode; omit it for location or owner mode. |
-| &nbsp;&nbsp;[].filePath | string? | Path to the file. Provide it with `line` for location mode. |
+| &nbsp;&nbsp;[].filePath | string? | Path to the file. Supports project-relative paths, paths with '..', absolute paths, archive entries like '/path/lib.jar!/pkg/Foo.class', and URLs such as 'file://', 'jar://', and 'jrt://'. Any path returned from the other tools can be passed as is (e.g. paths from 'search_*' tools). Provide it with `line` for location mode. |
 | &nbsp;&nbsp;[].line | integer? | 1-based line number. Provide it with `filePath` for location mode. |
-| &nbsp;&nbsp;[].owner | string? | Breakpoint owner filter. An item with only `owner` removes all breakpoints for that owner. Default: agent. |
+| &nbsp;&nbsp;[].owner* | user \\| agent | Breakpoint owner filter. An item with only `owner` removes all breakpoints for that owner. Default: agent. |
 | rootFolder | string | The path to the root folder of the Rider solution or project. Pass this value ALWAYS if you are aware of it. It reduces numbers of ambiguous calls.<br/>In the case you know only the current working directory you can use it as the root folder path.<br/>If you're not aware about the root folder path you can ask user about it. |
 
 ## Output
@@ -23,4 +23,3 @@ Use this tool to remove arbitrary breakpoint IDs or locations in one call.<br/><
 | &nbsp;&nbsp;[].message | string? | Additional note about the completed operation. |
 | &nbsp;&nbsp;[].error | string? | Expected validation or targeting error. Present only when success=false. |
 | totalBreakpoints* | integer | Current total number of breakpoints after all operations. |
-

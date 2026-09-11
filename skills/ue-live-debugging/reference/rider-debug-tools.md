@@ -50,7 +50,7 @@ See `reference/ue-python-inspection.md` for ready-to-use GAS/ASC/stat-tag one-li
 In `Development Editor` the compiler inlines game code; breakpoints report "No executable code associated with this line." Verify the configuration before setting any breakpoint. If the response contains `breakpointErrorsTail` with that message, stop and ask the user to rebuild in `DebugGame Editor`.
 
 1. `ue_status` — check editor connected
-2. `xdebug_set_breakpoint` — check response for `breakpointErrorsTail` "No executable code" → if present STOP, rebuild needed
+2. `xdebug_set_breakpoints` — pass the locations in the `breakpoints` array; check each result for "No executable code" → if present STOP, rebuild needed
 3. `ue_play` — start PIE if not running
 4. Ask the user to trigger the action manually in the PIE viewport
 5. `xdebug_get_debugger_status` — confirm paused

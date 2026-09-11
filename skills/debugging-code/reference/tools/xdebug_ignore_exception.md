@@ -13,4 +13,3 @@ Use this when a debug session keeps suspending on a noisy or expected exception 
 | exceptionType* | string |  |
 | ignored* | boolean |  |
 | message* | string |  |
-

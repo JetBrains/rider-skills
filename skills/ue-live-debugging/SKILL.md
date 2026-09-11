@@ -1,6 +1,6 @@
 ---
 name: ue-live-debugging
-description: "Use when debugging UE C++ crashes, runtime bugs, or unexpected behavior with Rider MCP available. Value over bash/grep: analyze_calls traces C++ call hierarchies (ReSharper backend); get_file_problems surfaces IDE-detected issues; get_symbol_info confirms API contracts; xdebug_set_breakpoint sets live breakpoints; ue_execute_python queries live PIE state. DO NOT TRIGGER for: pure build errors with no runtime component, net-new feature work, Blueprint-only work. When Rider MCP is unavailable, runs in reduced mode — Bash/Grep only, IDE diagnostics skipped."
+description: "Use when debugging UE C++ crashes, runtime bugs, or unexpected behavior with Rider MCP available. Value over bash/grep: analyze_calls traces C++ call hierarchies (ReSharper backend); get_file_problems surfaces IDE-detected issues; get_symbol_info confirms API contracts; xdebug_set_breakpoints sets live breakpoints; ue_execute_python queries live PIE state. DO NOT TRIGGER for: pure build errors with no runtime component, net-new feature work, Blueprint-only work. When Rider MCP is unavailable, runs in reduced mode — Bash/Grep only, IDE diagnostics skipped."
 allowed-tools: Read Glob Grep Bash Write Edit ToolSearch
 metadata:
   argument-hint: "[bug description, suspect function/class, or crash context]"
@@ -36,7 +36,7 @@ Before placing any breakpoints in **game module** C++ code, verify the binary wa
 
 > "The breakpoint will not currently be hit. No executable code is associated with this line."
 
-**How to check:** After `xdebug_set_breakpoint`, inspect the response for `breakpointErrorsTail` entries containing that message. If present → STOP. Instruct the user to switch Rider's build configuration to `DebugGame Editor` and rebuild before continuing. Do not attempt to fire the repro until the breakpoint is confirmed bound.
+**How to check:** After `xdebug_set_breakpoints`, inspect each result for that message. If present → STOP. Instruct the user to switch Rider's build configuration to `DebugGame Editor` and rebuild before continuing. Do not attempt to fire the repro until the breakpoint is confirmed bound.
 
 **Engine-only breakpoints** (RiderLink, UE core) are unaffected — this check applies only to the project's own game modules.
 
@@ -169,7 +169,7 @@ Do not just tell the user where to set breakpoints — **set them via MCP**. Pic
 
 **Load the required tools first** (if not already loaded):
 ```
-ToolSearch(query: "select:mcp__<prefix>__xdebug_set_breakpoint,mcp__<prefix>__xdebug_get_debugger_status,mcp__<prefix>__xdebug_get_frame_values,mcp__<prefix>__xdebug_get_stack,mcp__<prefix>__ue_play,mcp__<prefix>__ue_status,mcp__<prefix>__execute_run_configuration,mcp__<prefix>__get_run_configurations")
+ToolSearch(query: "select:mcp__<prefix>__xdebug_set_breakpoints,mcp__<prefix>__xdebug_get_debugger_status,mcp__<prefix>__xdebug_get_frame_values,mcp__<prefix>__xdebug_get_stack,mcp__<prefix>__ue_play,mcp__<prefix>__ue_status,mcp__<prefix>__execute_run_configuration,mcp__<prefix>__get_run_configurations")
 ```
 
 **5a — Check editor and PIE state** using `ue_status`.
@@ -177,7 +177,7 @@ ToolSearch(query: "select:mcp__<prefix>__xdebug_set_breakpoint,mcp__<prefix>__xd
 - If connected and PIE idle → proceed to 5b.
 - If PIE already running → proceed to 5b directly.
 
-**5b — Set breakpoints** using `xdebug_set_breakpoint`. Set standard, conditional, or logpoint breakpoints as appropriate. See `reference/ue-debug-patterns.md — Breakpoint Placement Strategies` for placement rules.
+**5b — Set breakpoints** using `xdebug_set_breakpoints`. Pass the locations in the `breakpoints` array. Set standard, conditional, or logpoint breakpoints as appropriate. See `reference/ue-debug-patterns.md — Breakpoint Placement Strategies` for placement rules.
 
 **5c — Start PIE** using `ue_play` if not already running.
 

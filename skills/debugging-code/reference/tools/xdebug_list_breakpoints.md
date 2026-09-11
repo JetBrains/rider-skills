@@ -28,4 +28,3 @@ Use this tool to see all currently set breakpoints and their properties.<br/><br
 | totalCount* | integer | Total count. |
 | enabledCount* | integer | Enabled count. |
 | breakpointsMuted | boolean | Whether breakpoints are globally muted for the resolved debugger session. |
-
