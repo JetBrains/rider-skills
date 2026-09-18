@@ -153,6 +153,24 @@ Discipline applied at every step:
 ## Frame Climbing And Rewind
 When stopped in a frame, inspect upper frames to reconstruct data provenance: identify who passed the current values and the earliest caller frame where state became incorrect. If the required location is already passed: restart the run with an earlier breakpoint (`AUTO`), or set an earlier breakpoint and ask the user to reproduce again (`ASSISTED`). Do not continue from a point already too late for the needed evidence. When a frame points to external / decompiled code, read it with `read_file` and set breakpoints there if needed to trace provenance deeper.
 
+## .NET Async Waits
+Use `xdebug_get_async_tasks` when an `await` never completes, a `.Wait()`/`.Result` call hangs, or the thread stack does not show who called the paused code because the chain crosses an `await`.
+It needs a paused .NET session (.NET or .NET Framework); Mono and Unity are unsupported. Read [the graph reference](reference/tools/xdebug_get_async_tasks.md) before calling it, and [the stack reference](reference/tools/xdebug_get_async_task_stack.md) before expanding a node.
+
+- Call `execute_tool(command="xdebug_get_async_tasks --sessionId <id>")` with the captured session ID. The result is paged; `totalCount` is the full node count. The first page holds `deadlocked`, `blocked`, and `active` nodes first, so start there and fetch the next page with `--offset` only when a `waitsForNodeIds` entry is missing.
+- The graph holds every incomplete `Task` plus the threads blocked in a synchronous wait on a task. Running threads and completed tasks are not nodes.
+- Each node carries `initialLocation` (the entry method) and `currentLocation` (the current `await` or wait point), like the columns of the Rider Tasks view. Most questions are answered by these two. `frameCount` tells how long the full chain is.
+- Start from `thread`, `blocked`, or `deadlocked` nodes. Follow `waitsForNodeIds` until you reach an `awaiting` or `scheduled` task with an empty list. Its `currentLocation` is the stuck operation.
+- To find who waits for a node, search the other nodes' `waitsForNodeIds` for its `id`. Keep a visited set; a cycle is a deadlock.
+- Call `execute_tool(command="xdebug_get_async_task_stack --sessionId <id> --nodeId <id>")` only when the two locations are not enough: to find the caller of a shared helper, or to read every `await` on the path. Frames go from the entry method (index 0) to the current wait point; they are method chains, not evaluation frames. Each frame carries `presentation` and, when symbols exist, `file` and `line`; use them to read the code or to place a breakpoint.
+- A `thread` node blocked on an `awaiting` task is a sync-over-async candidate: check whether the awaited continuation needs that same thread (UI or classic ASP.NET context). The graph does not model synchronization contexts.
+- A `scheduled` leaf either has not started or waits on something the graph does not model: a timer (`Task.Delay`), I/O, or a `TaskCompletionSource` that nobody completes. It has no `currentLocation`; use `initialLocation` to find the producer in code and set a breakpoint there.
+- `deadlocked` means a thread-level `lock`/`Monitor` cycle, not an async wait cycle. Inspect the involved threads with `xdebug_get_stack`.
+- `threadId` is present for `thread` nodes and for `task` nodes that run on a thread right now. To read values, locate that thread in `xdebug_get_threads` (`threadId` matches the `@<id>` suffix of the thread name) and use a fresh `xdebug_get_stack`.
+- Node `id` values stay valid within one pause; both tools share them. Do not reuse them after `RESUME`, `STEP_*`, or `xdebug_run_to_line`. `taskId` is the runtime `Task.Id` and stays stable across pauses while the task lives.
+- The graph is computed once per pause and both tools read the same snapshot. Call them for a concrete async question; fetch again after the pause changes.
+- If task data is unsupported or unavailable, fall back to thread stacks and state that async dependencies remain unverified.
+
 ## Evidence Checklist
 Before concluding, capture: the exact failing message/body; exception type and/or status code; the first location where state diverges from expected; concrete offending keys/values (and counts when relevant); the origin/provenance of wrong data; why the pipeline allowed it.
 
