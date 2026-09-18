@@ -28,5 +28,7 @@
 
 ## Rider Debugger
 
+- [xdebug_get_async_task_stack](tools/xdebug_get_async_task_stack.md) — Returns the logical `async`/`await` call chain of one node from `xdebug_get_async_tasks`.
+- [xdebug_get_async_tasks](tools/xdebug_get_async_tasks.md) — Returns the .NET async task graph for a paused session: incomplete `System.Threading.Tasks.Task` objects, the threads blocked on them, and what each node waits for.
 - [xdebug_ignore_exception](tools/xdebug_ignore_exception.md) — Stop the debugger from breaking on a given .NET exception type ("ignore" the exception).
 
