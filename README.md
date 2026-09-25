@@ -6,7 +6,7 @@ A set of [Agent Skills](https://docs.claude.com/en/docs/claude-code/skills) that
 
 ## What's included
 
-Two skills work across every Rider-supported language, one locates existing C# tests, and three are focused on Unreal Engine C++.
+Three skills work across every Rider-supported language, one locates existing C# tests, and three are focused on Unreal Engine C++.
 
 ### General — any Rider solution
 
@@ -14,8 +14,9 @@ Two skills work across every Rider-supported language, one locates existing C# t
 | --- | --- |
 | [`refactoring-code`](skills/refactoring-code/SKILL.md) | Semantic refactoring — rename, move types/namespaces, safe-delete, extract interface/base class/method, change signatures — resolved through the IDE's reference index instead of grep + text replace. |
 | [`debugging-code`](skills/debugging-code/SKILL.md) | Debugger-driven runtime root-cause analysis — set breakpoints and tracepoints, step, inspect frame values, and evaluate expressions to answer questions static reading can't. |
+| [`navigating-code`](skills/navigating-code/SKILL.md) | Semantic code navigation — find all usages of a symbol and all implementations of an interface, class or virtual member through the IDE reference index instead of grep. |
 
-Both cover .NET/C#, F#, VB, C++, Unity, Unreal Engine, XAML, Razor, and other mixed-language projects.
+All three cover .NET/C#, F#, VB, C++, Unity, Unreal Engine, XAML, Razor, and other mixed-language projects.
 
 ### C#/.NET
 
