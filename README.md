@@ -74,6 +74,23 @@ Then run `/plugins` inside Codex and install **Rider Skills** from the browser.
 
 For agents without plugin support, copy or symlink individual skill folders from `skills/` into `~/.claude/skills/` (all projects) or `<project>/.claude/skills/` (one project).
 
+### 3. Install the hooks (optional)
+
+The `rider-hooks` plugin adds a `PostToolUse` hook. After the agent edits a file, Rider reformats it and runs its code analysis. The agent gets the errors and warnings back and fixes them. The hook calls the `post_edit_quality_check` tool on the MCP server named `rider`, which is the name **Auto-Configure** registers. When Rider is not running, the agent reports a non-blocking hook error after each edit.
+
+**Claude Code**
+
+```text
+/plugin install rider-hooks@rider-skills
+/reload-plugins
+```
+
+**Codex**
+
+Install **Rider Hooks** from `/plugins`, then open `/hooks` and approve the Rider quality check. Codex skips a plugin hook until you approve it.
+
+Rider can also install the same hook from **Settings → Tools → AI Agent Hooks**. Use one of the two, or every edit is checked twice.
+
 ## Repository layout
 
 | Path | Contents |
@@ -81,6 +98,7 @@ For agents without plugin support, copy or symlink individual skill folders from
 | `skills/` | All six skills, one folder each. |
 | `skills/<skill>/SKILL.md` | Skill definition — frontmatter (name, description, allowed tools) and workflow. |
 | `skills/<skill>/reference/` | Progressive-disclosure reference: tool contracts, patterns, conventions loaded on demand. |
+| `plugins/rider-hooks/` | The `rider-hooks` plugin: `hooks/hooks.json` and its Claude Code and Codex metadata. |
 | `.claude-plugin/` | Claude Code plugin (`plugin.json`) and marketplace (`marketplace.json`) metadata. |
 | `.codex-plugin/` | Codex plugin metadata (`plugin.json`). |
 

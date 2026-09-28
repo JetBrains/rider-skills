@@ -12,6 +12,15 @@
       "author": {
         "name": "JetBrains"
       }
+    },
+    {
+      "name": "rider-hooks",
+      "version": "0.1.0",
+      "source": "./plugins/rider-hooks",
+      "description": "Reformats edited files and runs Rider code analysis. Asks the agent to fix errors and warnings.",
+      "author": {
+        "name": "JetBrains"
+      }
     }
   ]
 }

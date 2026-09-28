@@ -1,0 +1,34 @@
+{
+  "name": "rider-hooks",
+  "version": "0.1.0",
+  "description": "Reformats edited files and runs Rider code analysis. Asks the agent to fix errors and warnings.",
+  "author": {
+    "name": "JetBrains",
+    "url": "https://www.jetbrains.com/rider/"
+  },
+  "homepage": "https://github.com/JetBrains/rider-skills",
+  "repository": "https://github.com/JetBrains/rider-skills",
+  "license": "Apache-2.0",
+  "keywords": [
+    "rider",
+    "jetbrains",
+    "ide",
+    "hooks",
+    "formatting",
+    "code-analysis",
+    "mcp"
+  ],
+  "hooks": "./hooks/hooks.json",
+  "interface": {
+    "displayName": "Rider Hooks",
+    "shortDescription": "Rider reformat and code analysis after each agent edit",
+    "longDescription": "After the agent edits a file, Rider reformats it with the solution code style and runs its code analysis. The agent gets the errors and warnings back and fixes them.",
+    "developerName": "JetBrains",
+    "category": "Coding",
+    "capabilities": [
+      "Read",
+      "Write"
+    ],
+    "websiteURL": "https://github.com/JetBrains/rider-skills"
+  }
+}

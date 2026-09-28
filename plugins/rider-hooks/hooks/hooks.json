@@ -1,0 +1,27 @@
+{
+  "hooks": {
+    "PostToolUse": [
+      {
+        "matcher": "Edit|Write|MultiEdit|apply_patch",
+        "hooks": [
+          {
+            "type": "mcp_tool",
+            "server": "rider",
+            "tool": "post_edit_quality_check",
+            "input": {
+              "hook_event": {
+                "tool_name": "${tool_name}",
+                "tool_input": "${tool_input}",
+                "tool_response": "${tool_response}"
+              },
+              "min_severity": "warning",
+              "rootFolder": "${cwd}"
+            },
+            "timeout": 30,
+            "statusMessage": "Rider quality check"
+          }
+        ]
+      }
+    ]
+  }
+}
