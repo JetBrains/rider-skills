@@ -122,7 +122,7 @@ Debugger Run Progress:
 - [ ] Snapshot the breakpoint baseline; disable irrelevant user breakpoints
 - [ ] Set initial breakpoints; verify `lineText` for each
 - [ ] `xdebug_start_debugger_session ...` OR continue inside the existing session
-- [ ] After a fresh start or RESUME: `xdebug_control_session --action WAIT_FOR_PAUSE`
+- [ ] Wait for an expected pause after a fresh start; after RESUME, inspect its returned state
 - [ ] At each pause: `xdebug_get_stack` + values / eval (`xdebug_get_frame_values`, `xdebug_get_value_by_path`, `xdebug_evaluate_expression`)
 - [ ] Decide next movement (`STEP_OVER` / `STEP_INTO` when evidence is nearby, OR a new breakpoint then `RESUME`)
 - [ ] For tracepoints: `xdebug_control_session --action DRAIN_EVENTS`, then read the program's own output with `xdebug_get_process_output`
@@ -131,7 +131,10 @@ Debugger Run Progress:
 ```
 
 Discipline applied at every step:
-- Never `RESUME` without an explicitly named expected next stop; after every `RESUME`, always `WAIT_FOR_PAUSE`.
+- If the session is paused, use `--action RESUME --timeout 0` to finish an inspection or let tracepoints run.
+- Leave a running session running.
+- To continue to an expected suspending breakpoint, use `--action RESUME` and inspect its returned state.
+- Call `WAIT_FOR_PAUSE` only if the session is still running and that expected stop remains relevant.
 - On wait timeout: `PAUSE`, re-check enabled breakpoints and the expected path; after 2 consecutive timeouts, stop retrying that wait and expand breakpoint coverage.
 - Never assert a root cause without concrete runtime values, and make no runtime-behavior edits before it is proven.
 - Don't stop at a downstream symptom — climb frames / rewind to the producing state; if the needed location is already past, restart with an earlier breakpoint.
