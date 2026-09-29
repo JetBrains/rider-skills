@@ -1,5 +1,5 @@
 # xdebug_set_breakpoints
-Breakpoint configuration does not require an active debug session.<br/><br/>Batch behavior:<br/>- Each item is processed in request order.<br/>- A validation or targeting failure does not stop the remaining items.<br/><br/>Per-item targeting modes:<br/>- Location mode: provide `filePath` + 1-based `line`, and omit `breakpointId`.<br/>- ID mode: provide an opaque `breakpointId` returned by this tool or `xdebug_list_breakpoints`.<br/>  Optional `filePath`/`line` relocate a line breakpoint; they are ignored for non-line breakpoints.<br/><br/>Apply semantics:<br/>- Each item describes the complete target state. An ID update replaces the state instead of patching it.<br/>- Omitted settings use their defaults. Pass all settings that you must preserve.<br/>- The tool ignores relocation fields for other breakpoint types and reports this in `message`.<br/>- A new breakpoint has `agent` ownership. An update keeps the current ownership.
+Breakpoint configuration does not require an active debug session.<br/><br/>Batch behavior:<br/>- Each item is processed in request order.<br/>- A validation or targeting failure does not stop the remaining items.<br/><br/>Per-item targeting modes:<br/>- Location mode: provide `filePath` + 1-based `line`, and omit `breakpointId`.<br/>- ID mode: provide an opaque `breakpointId` returned by this tool or `xdebug_list_breakpoints`.<br/>  Optional `filePath`/`line` relocate a line breakpoint; they are ignored for non-line breakpoints.<br/><br/>Apply semantics:<br/>- Each item describes the complete target state. An ID update replaces the state instead of patching it.<br/>- Omitted settings use their defaults. Pass all settings that you must preserve.<br/>- The tool ignores relocation fields for other breakpoint types and reports this in `message`.<br/>- A new breakpoint has `agent` ownership. An update keeps the current ownership.<br/>- Clear `isCaptureThreadDump` or remove the breakpoint before the agent session ends, so that no thread dump<br/>  breakpoint outlives the session.
 
 ## Parameters
 | Name | Type | Description |
@@ -12,6 +12,7 @@ Breakpoint configuration does not require an active debug session.<br/><br/>Batc
 | &nbsp;&nbsp;[].logExpression | string? | Expression that the debugger evaluates and logs when the breakpoint triggers. Null clears an existing expression. |
 | &nbsp;&nbsp;[].isLogMessage* | boolean | Whether to log the breakpoint source position when hit. Default: false. |
 | &nbsp;&nbsp;[].isLogStack* | boolean | Whether to log the current stack trace when hit. Default: false. |
+| &nbsp;&nbsp;[].isCaptureThreadDump* | boolean | JVM breakpoints only. Whether to save a thread dump when hit (once per debug session). Clear the flag or remove the breakpoint before the agent session ends. Default: false. |
 | &nbsp;&nbsp;[].temporary* | boolean | Whether this is a temporary breakpoint removed after its first hit. Default: false. |
 | &nbsp;&nbsp;[].suspendPolicy* | ALL \\| THREAD \\| NONE | Suspend policy: ALL suspends all threads, THREAD suspends only the thread that hits the breakpoint, and NONE suspends no threads. Default: ALL. |
 | &nbsp;&nbsp;[].enabled* | boolean | Whether the breakpoint is enabled. Default: true. |
@@ -36,6 +37,7 @@ Breakpoint configuration does not require an active debug session.<br/><br/>Batc
 | &nbsp;&nbsp;&nbsp;&nbsp;logExpression | string? | Evaluate-and-log expression of the logpoint, if set (the value logged when the line is reached). |
 | &nbsp;&nbsp;&nbsp;&nbsp;isLogMessage* | boolean | Whether breakpoint logs source position when hit. |
 | &nbsp;&nbsp;&nbsp;&nbsp;isLogStack* | boolean | Whether breakpoint logs stack trace when hit. |
+| &nbsp;&nbsp;&nbsp;&nbsp;isCaptureThreadDump* | boolean | Whether breakpoint captures a thread dump when hit (once per debug session). |
 | &nbsp;&nbsp;&nbsp;&nbsp;temporary* | boolean | Whether breakpoint is temporary. |
 | &nbsp;&nbsp;&nbsp;&nbsp;suspendPolicy* | string | Breakpoint suspend policy (all/thread/none). |
 | &nbsp;&nbsp;&nbsp;&nbsp;hitCount* | integer | Breakpoint hit count, 0 when unavailable. |
@@ -43,3 +45,4 @@ Breakpoint configuration does not require an active debug session.<br/><br/>Batc
 | &nbsp;&nbsp;[].message | string? | Additional note about the completed operation. |
 | &nbsp;&nbsp;[].error | string? | Expected validation or targeting error for this operation. Present only when success=false. |
 | totalBreakpoints* | integer | Current total number of project breakpoints after all operations. |
+
