@@ -1,5 +1,5 @@
 # xdebug_list_breakpoints
-Use this tool to see all currently set breakpoints and their properties.<br/><br/>Tip: To continue to an expected pause, check that a suitable breakpoint is enabled before RESUME.<br/><br/>Behavior:<br/>- If `filePath` is provided, returns only breakpoints in that file.<br/>- Returns rich attributes for each breakpoint (id, type, file, line, enabled, owner, condition, isLogMessage, isLogStack, temporary, suspendPolicy, hitCount).<br/>- `breakpointsMuted` reports the session-wide debugger mute flag when a session is resolved; it does not change per-breakpoint `enabled` values.<br/><br/>Next call:<br/>- If you need a pause and no suitable breakpoint exists, call `xdebug_set_breakpoints`.<br/>- RESUME waits for the next pause or stop. Use timeout=0 when no next pause is needed.
+Use this tool to see all currently set breakpoints and their properties.<br/><br/>Tip: To continue to an expected pause, check that a suitable breakpoint is enabled before RESUME.<br/><br/>Behavior:<br/>- If `filePath` is provided, returns only breakpoints in that file.<br/>- Returns rich attributes for each breakpoint (id, type, file, line, enabled, owner, condition, isLogMessage, isLogStack, isCaptureThreadDump, temporary, suspendPolicy, hitCount).<br/>- `breakpointsMuted` reports the session-wide debugger mute flag when a session is resolved; it does not change per-breakpoint `enabled` values.<br/><br/>Next call:<br/>- If you need a pause and no suitable breakpoint exists, call `xdebug_set_breakpoints`.<br/>- RESUME waits for the next pause or stop. Use timeout=0 when no next pause is needed.
 
 ## Parameters
 | Name | Type | Description |
@@ -22,9 +22,11 @@ Use this tool to see all currently set breakpoints and their properties.<br/><br
 | &nbsp;&nbsp;[].logExpression | string? | Evaluate-and-log expression of the logpoint, if set (the value logged when the line is reached). |
 | &nbsp;&nbsp;[].isLogMessage* | boolean | Whether breakpoint logs source position when hit. |
 | &nbsp;&nbsp;[].isLogStack* | boolean | Whether breakpoint logs stack trace when hit. |
+| &nbsp;&nbsp;[].isCaptureThreadDump* | boolean | Whether breakpoint captures a thread dump when hit (once per debug session). |
 | &nbsp;&nbsp;[].temporary* | boolean | Whether breakpoint is temporary. |
 | &nbsp;&nbsp;[].suspendPolicy* | string | Breakpoint suspend policy (all/thread/none). |
 | &nbsp;&nbsp;[].hitCount* | integer | Breakpoint hit count, 0 when unavailable. |
 | totalCount* | integer | Total count. |
 | enabledCount* | integer | Enabled count. |
 | breakpointsMuted | boolean | Whether breakpoints are globally muted for the resolved debugger session. |
+
