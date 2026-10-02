@@ -81,12 +81,15 @@ For agents without plugin support, copy or symlink individual skill folders from
 | `skills/` | All six skills, one folder each. |
 | `skills/<skill>/SKILL.md` | Skill definition — frontmatter (name, description, allowed tools) and workflow. |
 | `skills/<skill>/reference/` | Progressive-disclosure reference: tool contracts, patterns, conventions loaded on demand. |
+| `skills/<skill>/metadata.json` | Skill version and a hash of the skill's files. |
 | `.claude-plugin/` | Claude Code plugin (`plugin.json`) and marketplace (`marketplace.json`) metadata. |
 | `.codex-plugin/` | Codex plugin metadata (`plugin.json`). |
 
 ## Contributing
 
 Issues and pull requests are welcome — improvements to workflows, reference contracts, and coverage of additional Rider languages and UE frameworks.
+
+The `Validate` workflow checks every pull request: skill frontmatter against the Agent Skills specification, the plugin manifests, local Markdown links, and each skill's `metadata.json`. When you change a skill, raise its `version` and set the `hash` that `python3 .github/scripts/check_skill_metadata.py` prints.
 
 ## License
 
