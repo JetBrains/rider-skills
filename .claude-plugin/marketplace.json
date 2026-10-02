@@ -1,5 +1,6 @@
 {
   "name": "rider-skills",
+  "description": "JetBrains Rider skills that give coding agents IDE-grade code intelligence through the Rider MCP server.",
   "owner": {
     "name": "JetBrains"
   },
