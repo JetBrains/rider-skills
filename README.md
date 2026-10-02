@@ -2,7 +2,7 @@
 
 # Rider Skills
 
-A set of [Agent Skills](https://docs.claude.com/en/docs/claude-code/skills) that give coding agents **IDE-grade code intelligence inside JetBrains Rider**. Instead of falling back to text edits, `grep`, and print debugging, these skills drive Rider's refactoring engine, debugger, code coverage data, and static analysis through the **Rider MCP server** — so a rename updates every resolved reference, a breakpoint inspects real runtime state, existing tests are located precisely, and diagnostics catch errors before a full build.
+A set of [Agent Skills](https://agentskills.io/) that give coding agents **IDE-grade code intelligence inside JetBrains Rider**. Instead of falling back to text edits, `grep`, and print debugging, these skills drive Rider's refactoring engine, debugger, code coverage data, and static analysis through the **Rider MCP server** — so a rename updates every resolved reference, a breakpoint inspects real runtime state, existing tests are located precisely, and diagnostics catch errors before a full build.
 
 ## What's included
 
