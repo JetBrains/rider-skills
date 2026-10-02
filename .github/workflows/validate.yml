@@ -1,0 +1,68 @@
+name: Validate
+
+on:
+  pull_request:
+  push:
+    branches: [master]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          # The version check reads metadata.json at the pull request base.
+          fetch-depth: 0
+          persist-credentials: false
+
+      # Each check runs even when an earlier one fails, so a pull request sees every problem at once.
+      - name: Skill metadata matches the content
+        if: ${{ !cancelled() }}
+        env:
+          BASE_SHA: ${{ github.event.pull_request.base.sha }}
+        run: |
+          if [ -n "$BASE_SHA" ]; then
+            python3 .github/scripts/check_skill_metadata.py --base-ref "$BASE_SHA"
+          else
+            python3 .github/scripts/check_skill_metadata.py
+          fi
+
+      - name: Skills follow the Agent Skills specification
+        if: ${{ !cancelled() }}
+        env:
+          # The agentskills.io reference validator has no releases, so it is pinned to a commit.
+          SKILLS_REF: git+https://github.com/agentskills/agentskills@69ef37e9424c0a7ea9dd2293b559e43ec8176379#subdirectory=skills-ref
+        run: |
+          python3 -m venv "$RUNNER_TEMP/skills-ref"
+          "$RUNNER_TEMP/skills-ref/bin/pip" install --quiet "skills-ref @ $SKILLS_REF"
+          status=0
+          for skill in skills/*/; do
+            "$RUNNER_TEMP/skills-ref/bin/skills-ref" validate "$skill" || status=1
+          done
+          exit "$status"
+
+      - name: Plugin manifests are valid and agree
+        if: ${{ !cancelled() }}
+        run: |
+          # The stable channel rather than a pin: the check should match the Claude Code that users run.
+          npm install --global --prefix "$RUNNER_TEMP/claude" @anthropic-ai/claude-code@stable
+          claude="$RUNNER_TEMP/claude/bin/claude"
+          "$claude" --version
+          "$claude" plugin validate --strict .claude-plugin/marketplace.json
+          for source in $(jq -r '.plugins[].source' .claude-plugin/marketplace.json); do
+            "$claude" plugin validate --strict "${source%/}/.claude-plugin/plugin.json"
+          done
+          python3 .github/scripts/check_plugin_manifests.py
+
+      - name: Markdown links resolve
+        if: ${{ !cancelled() }}
+        run: python3 .github/scripts/check_links.py
