@@ -78,7 +78,7 @@ For agents without plugin support, copy or symlink individual skill folders from
 
 | Path | Contents |
 | --- | --- |
-| `skills/` | All six skills, one folder each. |
+| `skills/` | All skills, one folder each. |
 | `skills/<skill>/SKILL.md` | Skill definition — frontmatter (name, description, allowed tools) and workflow. |
 | `skills/<skill>/reference/` | Progressive-disclosure reference: tool contracts, patterns, conventions loaded on demand. |
 | `skills/<skill>/metadata.json` | Skill version and a hash of the skill's files. |
