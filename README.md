@@ -50,7 +50,7 @@ Each skill's `SKILL.md` teaches the workflow, decision points, and guardrails; w
 
 ### 1. Connect the Rider MCP server
 
-In Rider, open **Settings → Tools → MCP Server**, enable the server, and click **Auto-Configure** for your client (Claude Code, Codex, etc.) — Rider registers itself with the agent, no commands needed. Then run the agent from inside the solution folder Rider has open.
+In Rider, open **Settings → AI → MCP Server**, enable the server, and click **Auto-Configure** for your client (Claude Code, Codex, etc.) — Rider registers itself with the agent, no commands needed. Then run the agent from inside the solution folder Rider has open.
 
 ### 2. Install the skills
 
