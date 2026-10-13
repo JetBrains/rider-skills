@@ -1,5 +1,5 @@
 # xdebug_get_stack
-Use this tool to see the sequence of method calls that led to the current execution point.<br/><br/>Preconditions:<br/>- Session must be suspended.<br/><br/>Behavior:<br/>- `threadId` should come from `xdebug_get_threads` and matches the debugger thread display name (defaults to active thread).<br/>- Includes frames even when source position is missing (file/line may be null).<br/><br/>Pagination:<br/>- `offset`/`limit` are applied after collecting the full stack.<br/><br/>Frame fields include: index, file, line, isCurrent, presentation.<br/>`file` is reported as provided by the debugger (no path normalization).<br/><br/>Next call:<br/>- Use frame index from the current paused result in `xdebug_get_frame_values`, `xdebug_get_value_by_path`, or `xdebug_evaluate_expression`.<br/>- Do not reuse a cached `frameIndex` after `RESUME`, `STEP_*`, `xdebug_run_to_line`, or any change in paused location.
+Use this tool to see the sequence of method calls that led to the current execution point.<br/><br/>Preconditions:<br/>- Session must be suspended.<br/><br/>Behavior:<br/>- `threadId` should come from `xdebug_get_threads` and matches the debugger thread display name (defaults to active thread).<br/>- Includes frames even when source position is missing (file/line may be null).<br/><br/>Pagination:<br/>- `offset`/`limit` are applied to frames after collecting the full stack.<br/><br/>Frame fields include: index, file, line, isCurrent, presentation, separatorAbove.<br/>An optional `separatorAbove` label marks the start of a distinct stack section, such as an async stack trace.<br/>The frame with this label is the first frame in that section.<br/>`file` is reported as provided by the debugger (no path normalization).<br/><br/>Next call:<br/>- Use frame index from the current paused result in `xdebug_get_frame_values`, `xdebug_get_value_by_path`, or `xdebug_evaluate_expression`.<br/>- Do not reuse a cached `frameIndex` after `RESUME`, `STEP_*`, `xdebug_run_to_line`, or any change in paused location.
 
 ## Parameters
 | Name | Type | Description |
@@ -19,6 +19,7 @@ Use this tool to see the sequence of method calls that led to the current execut
 | &nbsp;&nbsp;[].file | string? | Source file path as provided by the debugger when available. |
 | &nbsp;&nbsp;[].line | integer? | 1-based source line when available. |
 | &nbsp;&nbsp;[].isCurrent* | boolean | Whether this is the currently selected frame. |
+| &nbsp;&nbsp;[].separatorAbove | string? | Debugger separator label above this frame. It marks the start of a distinct stack section, such as an async stack trace. |
 | threadId | string? | Thread identifier used to fetch this stack. |
 | totalFrames* | integer | Total frame count for the stack. |
 
